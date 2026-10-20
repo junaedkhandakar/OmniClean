@@ -13,7 +13,7 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /target:winexe /platform:anycpu /optimize+ /lib:"%WPF_DIR%" /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /win32icon:"app.ico" /out:"OmniClean.exe" "OmniClean.cs"
+"%CSC%" /target:winexe /platform:anycpu /optimize+ /lib:"%WPF_DIR%" /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /win32icon:"app.ico" /win32manifest:"app.manifest" /out:"OmniClean.exe" "OmniClean.cs" "OmniClean.Engine.cs" "OmniClean.Analysis.cs"
 
 if %errorlevel% equ 0 (
     echo.

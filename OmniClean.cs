@@ -1,11 +1,14 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +17,13 @@ using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using Microsoft.Win32;
+
+[assembly: AssemblyTitle("OmniClean")]
+[assembly: AssemblyProduct("OmniClean Universal Windows Performance & Storage Suite")]
+[assembly: AssemblyCompany("Junaed Khandakar")]
+[assembly: AssemblyCopyright("Copyright 2026 Junaed Khandakar")]
+[assembly: AssemblyVersion("1.0.4.0")]
+[assembly: AssemblyFileVersion("1.0.4.0")]
 
 namespace OmniClean {
     public class CategoryItem {
@@ -54,8 +64,8 @@ namespace OmniClean {
         public TextBlock StatusTextRef { get; set; }
     }
 
-    class Program {
-        const string CURRENT_VERSION = "v1.0.3";
+    partial class Program {
+        const string CURRENT_VERSION = "v1.0.4";
         const string REPO_URL = "https://github.com/Junaed93/OmniClean";
         const string RELEASES_API = "https://api.github.com/repos/Junaed93/OmniClean/releases/latest";
         const string TASK_NAME = "OmniCleanUniversalAutoClean";
@@ -72,6 +82,19 @@ namespace OmniClean {
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
         const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        const int DWM_WINDOW_CORNER_ROUND = 2;
+
+        [DllImport("dwmapi.dll")]
+        static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MARGINS {
+            public int cxLeftWidth;
+            public int cxRightWidth;
+            public int cyTopHeight;
+            public int cyBottomHeight;
+        }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public class MEMORYSTATUSEX {
@@ -186,8 +209,30 @@ namespace OmniClean {
         static string selectedDriveLetter = "C";
         static long currentMinLargeFileBytes = 100 * 1024 * 1024;
 
+        // v1.0.4: cancellation, single instance, and clean audit trail
+        static Button btnStopLargeFiles;
+        static Button btnStopDuplicates;
+        static CancellationTokenSource largeFilesCts;
+        static CancellationTokenSource duplicatesCts;
+        static Mutex singleInstanceMutex;
+        static StreamWriter cleanManifest;
+        static string lastCleanLogPath;
+        static long cleanDeletedCount;
+        static long cleanFailedCount;
+        static double cleanFreedMB;
+
         [STAThread]
         static void Main(string[] args) {
+            // Single-instance guard: prevents two scanners/cleaners racing on the same files.
+            bool createdNew;
+            singleInstanceMutex = new Mutex(true, @"Local\OmniClean_SingleInstance", out createdNew);
+            if (!createdNew) {
+                if (args == null || args.Length == 0) {
+                    MessageBox.Show("OmniClean is already running.", "OmniClean", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                return;
+            }
+
             if (args != null && args.Length > 0 && args[0].Equals("--silent-clean", StringComparison.OrdinalIgnoreCase)) {
                 PerformSilentCleanup();
                 return;
@@ -196,6 +241,8 @@ namespace OmniClean {
             try {
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 Application app = new Application();
+                app.DispatcherUnhandledException += OnDispatcherUnhandledException;
+                AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
 
                 string xaml = @"
 <Window xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
@@ -205,8 +252,8 @@ namespace OmniClean {
         MinWidth='1060' MinHeight='720'
         WindowStartupLocation='CenterScreen'
         WindowStyle='None'
-        AllowsTransparency='True'
-        Background='Transparent'
+        AllowsTransparency='False'
+        Background='#0A0F1C'
         Foreground='#F8FAFC'
         FontFamily='Segoe UI'
         UseLayoutRounding='True'
@@ -261,6 +308,65 @@ namespace OmniClean {
             <GradientStop Color='#1B1840' Offset='0'/>
             <GradientStop Color='#251C4C' Offset='1'/>
         </LinearGradientBrush>
+
+        <!-- Dark scrollbar theme -->
+        <ControlTemplate x:Key='VScrollBarTemplate' TargetType='ScrollBar'>
+            <Grid Background='Transparent'>
+                <Track Name='PART_Track' IsDirectionReversed='True'>
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0' Focusable='False' IsTabStop='False'/>
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb Name='thumb' Margin='2,0'>
+                            <Thumb.Template>
+                                <ControlTemplate TargetType='Thumb'>
+                                    <Border Background='#334155' CornerRadius='4' Width='6'/>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command='ScrollBar.PageDownCommand' Opacity='0' Focusable='False' IsTabStop='False'/>
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+        <ControlTemplate x:Key='HScrollBarTemplate' TargetType='ScrollBar'>
+            <Grid Background='Transparent'>
+                <Track Name='PART_Track'>
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command='ScrollBar.PageLeftCommand' Opacity='0' Focusable='False' IsTabStop='False'/>
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb Name='thumb' Margin='0,2'>
+                            <Thumb.Template>
+                                <ControlTemplate TargetType='Thumb'>
+                                    <Border Background='#334155' CornerRadius='4' Height='6'/>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command='ScrollBar.PageRightCommand' Opacity='0' Focusable='False' IsTabStop='False'/>
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+        <Style TargetType='ScrollBar'>
+            <Setter Property='Width' Value='10'/>
+            <Setter Property='Background' Value='Transparent'/>
+            <Setter Property='Template' Value='{StaticResource VScrollBarTemplate}'/>
+            <Style.Triggers>
+                <Trigger Property='Orientation' Value='Horizontal'>
+                    <Setter Property='Height' Value='10'/>
+                    <Setter Property='Width' Value='Auto'/>
+                    <Setter Property='Template' Value='{StaticResource HScrollBarTemplate}'/>
+                </Trigger>
+                <Trigger Property='IsEnabled' Value='False'>
+                    <Setter Property='Visibility' Value='Hidden'/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
         <Style TargetType='Border'>
             <Setter Property='CornerRadius' Value='12'/>
@@ -433,10 +539,7 @@ namespace OmniClean {
     </Window.Resources>
 
     <!-- Outer Glassmorphic Frame -->
-    <Border Background='{StaticResource BrushWindowBg}' BorderBrush='#223050' BorderThickness='1' CornerRadius='16'>
-        <Border.Effect>
-            <DropShadowEffect Color='#000000' BlurRadius='40' ShadowDepth='8' Direction='270' Opacity='0.5'/>
-        </Border.Effect>
+    <Border Background='{StaticResource BrushWindowBg}' BorderBrush='#223050' BorderThickness='1' CornerRadius='8'>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height='46'/>
@@ -463,7 +566,7 @@ namespace OmniClean {
                         </Border>
                         <TextBlock Text='OmniClean' FontSize='15' FontWeight='Bold' Foreground='#FFFFFF' VerticalAlignment='Center'/>
                         <Border Background='#241D57' BorderBrush='#818CF8' BorderThickness='1' CornerRadius='7' Padding='7,2' Margin='8,0,0,0' VerticalAlignment='Center'>
-                            <TextBlock Text='v1.0.3 PRO' FontSize='9' FontWeight='Bold' Foreground='#C7D2FE'/>
+                            <TextBlock Text='v1.0.4 PRO' FontSize='9' FontWeight='Bold' Foreground='#C7D2FE'/>
                         </Border>
                     </StackPanel>
 
@@ -782,7 +885,10 @@ namespace OmniClean {
                                             <TextBlock Text='Large Files Profiler' FontSize='20' FontWeight='Bold' Foreground='{StaticResource BrushTitleText}'/>
                                             <TextBlock Name='txtLargeFilesSummary' Text='Discover large files (>100 MB) consuming your storage space.' FontSize='12' Foreground='#94A3B8'/>
                                         </StackPanel>
-                                        <Button Name='btnScanLargeFiles' Content='🔍 Scan for Large Files' Style='{StaticResource PrimaryBtn}' HorizontalAlignment='Right' Padding='18,8'/>
+                                        <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
+                                            <Button Name='btnStopLargeFiles' Content='⏹ Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
+                                            <Button Name='btnScanLargeFiles' Content='🔍 Scan for Large Files' Style='{StaticResource PrimaryBtn}' Padding='18,8'/>
+                                        </StackPanel>
                                     </Grid>
 
                                     <!-- Size Filters -->
@@ -817,6 +923,7 @@ namespace OmniClean {
                                         </StackPanel>
                                         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
                                             <Button Name='btnCleanAllDuplicates' Content='🧹 Delete All Duplicate Copies' Style='{StaticResource SecondaryBtn}' Margin='0,0,8,0' Padding='14,8'/>
+                                            <Button Name='btnStopDuplicates' Content='⏹ Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
                                             <Button Name='btnScanDuplicates' Content='🔎 Find Duplicates' Style='{StaticResource PrimaryBtn}' Padding='18,8'/>
                                         </StackPanel>
                                     </Grid>
@@ -890,7 +997,7 @@ namespace OmniClean {
                                     </Border.Effect>
                                     <StackPanel>
                                         <TextBlock Text='System &amp; Application Specs' FontSize='18' FontWeight='Bold' Foreground='White' Margin='0,0,0,6'/>
-                                        <TextBlock Text='Version 1.0.3 Universal Standalone Edition' FontSize='12' Foreground='#94A3B8' Margin='0,0,0,14'/>
+                                        <TextBlock Text='Version 1.0.4 Universal Standalone Edition' FontSize='12' Foreground='#94A3B8' Margin='0,0,0,14'/>
 
                                         <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#1C2942' BorderThickness='1' CornerRadius='8' Padding='14' Margin='0,0,0,16'>
                                             <StackPanel>
@@ -925,11 +1032,33 @@ namespace OmniClean {
     </Border>
 </Window>";
 
+                // CI validation mode: parse the embedded XAML and report via exit code (no window).
+                if (args != null && Array.IndexOf(args, "--validate-xaml") >= 0) {
+                    try {
+                        XamlReader.Parse(xaml);
+                        File.WriteAllText("xaml-validation.log", "OK: embedded XAML parsed successfully.\r\n");
+                        Environment.Exit(0);
+                    } catch (Exception vx) {
+                        File.WriteAllText("xaml-validation.log", "XAML VALIDATION FAILED:\r\n" + vx.ToString());
+                        Environment.Exit(1);
+                    }
+                }
+
                 mainWindow = (Window)XamlReader.Parse(xaml);
 
+                // Native Win11 chrome: rounded corners, immersive dark mode, and a DWM
+                // drop shadow for this frameless window (no-op with ignored codes on older Windows).
                 IntPtr hwnd = new WindowInteropHelper(mainWindow).EnsureHandle();
+                int cornerPref = DWM_WINDOW_CORNER_ROUND;
+                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
                 int useDark = 1;
                 DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+                MARGINS margins = new MARGINS();
+                margins.cxLeftWidth = -1;
+                margins.cxRightWidth = -1;
+                margins.cyTopHeight = -1;
+                margins.cyBottomHeight = -1;
+                DwmExtendFrameIntoClientArea(hwnd, ref margins);
 
                 // Titlebar and Window Controls
                 titleBar = (Border)mainWindow.FindName("titleBar");
@@ -1031,8 +1160,13 @@ namespace OmniClean {
                 btnFilter1GB = (Button)mainWindow.FindName("btnFilter1GB");
                 pnlLargeFiles = (StackPanel)mainWindow.FindName("pnlLargeFiles");
                 txtLargeFilesSummary = (TextBlock)mainWindow.FindName("txtLargeFilesSummary");
+                btnStopLargeFiles = (Button)mainWindow.FindName("btnStopLargeFiles");
 
                 btnScanLargeFiles.Click += (s, e) => ScanLargeFilesAsync();
+                btnStopLargeFiles.Click += (s, e) => {
+                    if (largeFilesCts != null) largeFilesCts.Cancel();
+                    btnStopLargeFiles.IsEnabled = false;
+                };
                 btnFilterAll100.Click += (s, e) => ApplyLargeFileFilter(100 * 1024 * 1024);
                 btnFilter500MB.Click += (s, e) => ApplyLargeFileFilter(500 * 1024 * 1024);
                 btnFilter1GB.Click += (s, e) => ApplyLargeFileFilter(1024L * 1024 * 1024);
@@ -1042,7 +1176,12 @@ namespace OmniClean {
                 btnCleanAllDuplicates = (Button)mainWindow.FindName("btnCleanAllDuplicates");
                 pnlDuplicates = (StackPanel)mainWindow.FindName("pnlDuplicates");
                 txtDuplicatesSummary = (TextBlock)mainWindow.FindName("txtDuplicatesSummary");
+                btnStopDuplicates = (Button)mainWindow.FindName("btnStopDuplicates");
                 btnScanDuplicates.Click += (s, e) => ScanDuplicatesAsync();
+                btnStopDuplicates.Click += (s, e) => {
+                    if (duplicatesCts != null) duplicatesCts.Cancel();
+                    btnStopDuplicates.IsEnabled = false;
+                };
                 btnCleanAllDuplicates.Click += (s, e) => CleanAllDuplicatesAsync();
 
                 // Tab 4 Bindings
@@ -1090,7 +1229,7 @@ namespace OmniClean {
                 CheckForUpdatesAsync(false);
                 StartUptimeTimer();
 
-                Log("OmniClean v1.0.3 PRO initialized.");
+                Log("OmniClean v1.0.4 PRO initialized.");
                 Log(string.Format("Host OS: {0} ({1}-bit)", Environment.OSVersion, Environment.Is64BitOperatingSystem ? "64" : "32"));
                 Log("Select cleanable targets and click 'Clean Selected Storage'.");
 
@@ -1101,6 +1240,82 @@ namespace OmniClean {
             } catch (Exception ex) {
                 MessageBox.Show("Fatal startup error:\r\n" + ex.ToString(), "OmniClean Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        // ---- v1.0.4: crash reporting ----
+        static void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e) {
+            try {
+                WriteCrashLog(e.Exception);
+                MessageBox.Show("An unexpected error occurred:\r\n" + e.Exception.Message + "\r\n\r\nDetails were written to the crash log.", "OmniClean", MessageBoxButton.OK, MessageBoxImage.Error);
+            } catch { }
+            e.Handled = true;
+        }
+
+        static void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e) {
+            try {
+                Exception ex = e.ExceptionObject as Exception;
+                if (ex != null) WriteCrashLog(ex);
+            } catch { }
+        }
+
+        static void WriteCrashLog(Exception ex) {
+            try {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OmniClean", "logs");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "crash-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log"),
+                    "OmniClean " + CURRENT_VERSION + " crash\r\nTime: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n\r\n" + ex.ToString());
+            } catch { }
+        }
+
+        // ---- v1.0.4: semver-aware update comparison (a pre-release build must
+        //      not advertise an OLDER tag as "newer") ----
+        static bool IsNewerVersion(string latestTag, string currentVersion) {
+            string[] partsLatest = (latestTag ?? "").Trim().TrimStart('v', 'V').Split('.');
+            string[] partsCurrent = (currentVersion ?? "").Trim().TrimStart('v', 'V').Split('.');
+            for (int i = 0; i < 3; i++) {
+                int lv = 0, cv = 0;
+                int.TryParse(partsLatest.Length > i ? partsLatest[i] : "0", out lv);
+                int.TryParse(partsCurrent.Length > i ? partsCurrent[i] : "0", out cv);
+                if (lv != cv) return lv > cv;
+            }
+            return false;
+        }
+
+        // ---- v1.0.4: cleanup audit trail (deletion manifest) ----
+        static void BeginCleanManifest(bool isDryRun) {
+            cleanDeletedCount = 0;
+            cleanFailedCount = 0;
+            cleanFreedMB = 0;
+            try {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OmniClean", "logs");
+                Directory.CreateDirectory(dir);
+                lastCleanLogPath = Path.Combine(dir, "clean-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + (isDryRun ? "-preview" : "") + ".log");
+                cleanManifest = new StreamWriter(lastCleanLogPath, false, Encoding.UTF8);
+                cleanManifest.WriteLine("# OmniClean " + CURRENT_VERSION + " cleanup manifest");
+                cleanManifest.WriteLine("# Mode: " + (isDryRun ? "PREVIEW (nothing deleted)" : "LIVE CLEAN"));
+                cleanManifest.WriteLine("# Started: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                cleanManifest.Flush();
+            } catch { cleanManifest = null; }
+        }
+
+        static void Manifest(string line) {
+            try {
+                if (cleanManifest != null) {
+                    cleanManifest.WriteLine(DateTime.Now.ToString("HH:mm:ss") + " " + line);
+                    cleanManifest.Flush();
+                }
+            } catch { }
+        }
+
+        static void EndCleanManifest(string summaryLine) {
+            try {
+                if (cleanManifest != null) {
+                    if (summaryLine != null) cleanManifest.WriteLine("# " + summaryLine);
+                    cleanManifest.WriteLine("# Finished: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                    cleanManifest.Dispose();
+                }
+            } catch { }
+            cleanManifest = null;
         }
 
         static void SwitchTab(int index) {
@@ -1268,8 +1483,7 @@ namespace OmniClean {
                         var match = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
                         if (match.Success) {
                             string latestTag = match.Groups[1].Value.Trim();
-                            // Normalize a leading "v" so tags like "1.0.3" and "v1.0.3" compare as equal.
-                            bool isNew = !string.Equals(latestTag.TrimStart('v', 'V'), CURRENT_VERSION.TrimStart('v', 'V'), StringComparison.OrdinalIgnoreCase);
+                            bool isNew = IsNewerVersion(latestTag, CURRENT_VERSION);
 
                             mainWindow.Dispatcher.Invoke(new Action(() => {
                                 if (isNew) {
@@ -1609,806 +1823,12 @@ namespace OmniClean {
             }
         }
 
-        static double GetDirectorySizeMB(string path) {
-            if (!Directory.Exists(path)) return 0;
-            double bytes = 0;
-            try {
-                string[] files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                foreach (var f in files) {
-                    try {
-                        FileInfo fi = new FileInfo(f);
-                        bytes += fi.Length;
-                    } catch { }
-                }
-            } catch { }
-            return bytes / (1024.0 * 1024.0);
-        }
-
-        static void RunScanAsync() {
-            if (isScanning || isCleaning) return;
-            isScanning = true;
-            btnRescan.IsEnabled = false;
-            btnClean.IsEnabled = false;
-            bannerSuccess.Visibility = Visibility.Collapsed;
-
-            foreach (var c in categories) {
-                c.BadgeRef.Text = "...";
-                c.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
-            }
-
-            Log(string.Format("Scanning storage volume {0}: for cleanable caches...", selectedDriveLetter));
-
-            Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-
-                foreach (var cat in categories) {
-                    double size = 0;
-                    bool installed = true;
-
-                    try {
-                        if (cat.Id == "recycle_bin") {
-                            size = 0;
-                            try {
-                                string binPath = selectedDriveLetter + @":\$Recycle.Bin";
-                                size = GetDirectorySizeMB(binPath);
-                            } catch { }
-                        } else if (cat.Id == "temp_files") {
-                            size += GetDirectorySizeMB(Path.GetTempPath());
-                            size += GetDirectorySizeMB(Path.Combine(winDir, "Temp"));
-                        } else if (cat.Id == "browser_cache") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Google\Chrome\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Mozilla\Firefox\Profiles"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Opera Software\Opera Stable\Cache"));
-                        } else if (cat.Id == "win_update") {
-                            size = GetDirectorySizeMB(Path.Combine(winDir, @"SoftwareDistribution\Download"));
-                        } else if (cat.Id == "crash_dumps") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, "CrashDumps"));
-                            size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"));
-                            size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"));
-                        } else if (cat.Id == "empty_folders") {
-                            size = 0.5;
-                        } else if (cat.Id == "nvidia_artifacts") {
-                            string ota = Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts");
-                            if (Directory.Exists(ota)) {
-                                size = GetDirectorySizeMB(ota);
-                            } else {
-                                installed = false;
-                            }
-                        } else if (cat.Id == "capcut_old") {
-                            string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                            if (Directory.Exists(capApps)) {
-                                var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                if (dirs.Count > 1) {
-                                    dirs.Sort();
-                                    string latest = dirs[dirs.Count - 1];
-                                    foreach (var d in dirs) {
-                                        if (d != latest) size += GetDirectorySizeMB(d);
-                                    }
-                                }
-                            } else {
-                                installed = false;
-                            }
-                        } else if (cat.Id == "vscode_cache") {
-                            string vscPath = Path.Combine(appData, "Code");
-                            if (Directory.Exists(vscPath)) {
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedExtensionVSIXs"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, @"Crashpad\reports"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedData"));
-                            } else {
-                                installed = false;
-                            }
-                        } else if (cat.Id == "dev_cache") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, "npm-cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"pip\cache"));
-                        } else if (cat.Id == "discord_cache") {
-                            string dsc = Path.Combine(appData, @"discord\Cache");
-                            if (Directory.Exists(dsc)) {
-                                size = GetDirectorySizeMB(dsc);
-                            } else {
-                                installed = false;
-                            }
-                        }
-                    } catch { }
-
-                    cat.SizeMB = size;
-                    cat.IsInstalled = installed;
-
-                    mainWindow.Dispatcher.Invoke(new Action(() => {
-                        if (!installed) {
-                            cat.BadgeRef.Text = "Not Detected";
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x47, 0x55, 0x69));
-                            cat.CheckBoxRef.IsEnabled = false;
-                            cat.CheckBoxRef.IsChecked = false;
-                        } else if (size > 1024) {
-                            cat.BadgeRef.Text = string.Format("{0:F2} GB", size / 1024.0);
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x84, 0xFC));
-                        } else if (size > 0.05) {
-                            cat.BadgeRef.Text = string.Format("{0:F1} MB", size);
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8));
-                        } else {
-                            cat.BadgeRef.Text = "Clean";
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
-                        }
-                    }));
-                }
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    isScanning = false;
-                    btnRescan.IsEnabled = true;
-                    UpdateSelectedSize();
-                    Log("Scan completed.");
-                }));
-            }));
-        }
-
-        static void StartCleanAsync() {
-            if (isCleaning || isScanning) return;
-            isCleaning = true;
-            btnClean.IsEnabled = false;
-            btnClean.Content = "Cleaning in Progress...";
-            bannerSuccess.Visibility = Visibility.Collapsed;
-
-            bool isDryRun = (chkDryRun.IsChecked == true);
-            Log(isDryRun ? "Starting Safe Dry Run simulation (Preview Mode)..." : "Starting clean on selected targets...");
-
-            Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-
-                foreach (var cat in categories) {
-                    if (cat.CheckBoxRef.IsChecked != true || !cat.IsInstalled) continue;
-
-                    Log((isDryRun ? "[Simulate] " : "[Purging] ") + cat.Name);
-
-                    try {
-                        if (cat.Id == "recycle_bin") {
-                            if (!isDryRun) SHEmptyRecycleBin(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-                        } else if (cat.Id == "temp_files") {
-                            CleanFolder(Path.GetTempPath(), isDryRun);
-                            CleanFolder(Path.Combine(winDir, "Temp"), isDryRun);
-                        } else if (cat.Id == "browser_cache") {
-                            CleanBrowserCaches(isDryRun);
-                        } else if (cat.Id == "win_update") {
-                            CleanFolder(Path.Combine(winDir, @"SoftwareDistribution\Download"), isDryRun);
-                        } else if (cat.Id == "crash_dumps") {
-                            CleanFolder(Path.Combine(localApp, "CrashDumps"), isDryRun);
-                            CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"), isDryRun);
-                            CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"), isDryRun);
-                        } else if (cat.Id == "empty_folders") {
-                            CleanEmptyDirectories(Path.GetTempPath(), isDryRun);
-                        } else if (cat.Id == "nvidia_artifacts") {
-                            CleanFolder(Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts"), isDryRun);
-                        } else if (cat.Id == "capcut_old") {
-                            string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                            if (Directory.Exists(capApps)) {
-                                var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                if (dirs.Count > 1) {
-                                    dirs.Sort();
-                                    string latest = dirs[dirs.Count - 1];
-                                    foreach (var d in dirs) {
-                                        if (d != latest) {
-                                            try { if (!isDryRun) Directory.Delete(d, true); } catch { }
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (cat.Id == "vscode_cache") {
-                            string vscPath = Path.Combine(appData, "Code");
-                            CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, "CachedData"), isDryRun);
-                        } else if (cat.Id == "dev_cache") {
-                            CleanFolder(Path.Combine(localApp, "npm-cache"), isDryRun);
-                            CleanFolder(Path.Combine(localApp, @"pip\cache"), isDryRun);
-                        } else if (cat.Id == "discord_cache") {
-                            CleanFolder(Path.Combine(appData, @"discord\Cache"), isDryRun);
-                        }
-                    } catch (Exception ex) {
-                        Log("Warning: " + ex.Message);
-                    }
-                }
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    isCleaning = false;
-                    btnClean.Content = "⚡ Clean Selected Storage";
-                    UpdateDiskMetrics();
-                    Log(isDryRun ? "Simulation finished. No files were modified." : "Universal cleanup successfully finished.");
-                    bannerSuccess.Visibility = Visibility.Visible;
-                    txtSuccessMsg.Text = isDryRun ? "Simulation complete. Storage preview calculated." : "Cleanup complete! Selected storage targets successfully purged.";
-                    RunScanAsync();
-                }));
-            }));
-        }
-
-        static void CleanFolder(string path, bool isDryRun) {
-            if (!Directory.Exists(path)) return;
-            try {
-                foreach (var f in Directory.GetFiles(path)) {
-                    try { if (!isDryRun) File.Delete(f); } catch { }
-                }
-                foreach (var d in Directory.GetDirectories(path)) {
-                    try { if (!isDryRun) Directory.Delete(d, true); } catch { }
-                }
-            } catch { }
-        }
-
-        static void CleanBrowserCaches(bool isDryRun) {
-            string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string[] browserCaches = new string[] {
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\Code Cache"),
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\GPUCache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Code Cache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\GPUCache"),
-                Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Opera Software\Opera Stable\Cache")
-            };
-
-            foreach (var bPath in browserCaches) {
-                CleanFolder(bPath, isDryRun);
-            }
-        }
-
-        static void CleanEmptyDirectories(string startLocation, bool isDryRun) {
-            try {
-                foreach (var d in Directory.GetDirectories(startLocation)) {
-                    CleanEmptyDirectories(d, isDryRun);
-                    if (Directory.GetFiles(d).Length == 0 && Directory.GetDirectories(d).Length == 0) {
-                        try { if (!isDryRun) Directory.Delete(d, false); } catch { }
-                    }
-                }
-            } catch { }
-        }
-
-        // ================= TAB 1: LARGE FILES FINDER =================
-        static void ScanLargeFilesAsync() {
-            btnScanLargeFiles.IsEnabled = false;
-            btnScanLargeFiles.Content = "Scanning Drive...";
-            pnlLargeFiles.Children.Clear();
-            txtLargeFilesSummary.Text = "Scanning user profile and common storage directories for files > 100 MB...";
-
-            Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string[] searchDirs = new string[] {
-                    Path.Combine(userProfile, "Downloads"),
-                    Path.Combine(userProfile, "Documents"),
-                    Path.Combine(userProfile, "Desktop"),
-                    Path.Combine(userProfile, "Videos"),
-                    Path.Combine(userProfile, "Music"),
-                    Path.Combine(userProfile, "Pictures")
-                };
-
-                var found = new List<LargeFileInfo>();
-
-                foreach (var dir in searchDirs) {
-                    if (Directory.Exists(dir)) {
-                        try {
-                            foreach (var f in Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories)) {
-                                try {
-                                    FileInfo fi = new FileInfo(f);
-                                    if (fi.Length > 100 * 1024 * 1024) { // > 100 MB
-                                        found.Add(new LargeFileInfo {
-                                            FilePath = fi.FullName,
-                                            FileName = fi.Name,
-                                            Extension = fi.Extension.ToUpper().Replace(".", ""),
-                                            Bytes = fi.Length,
-                                            SizeMB = fi.Length / (1024.0 * 1024.0)
-                                        });
-                                    }
-                                } catch { }
-                            }
-                        } catch { }
-                    }
-                }
-
-                found.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
-                allLargeFiles = found;
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    btnScanLargeFiles.IsEnabled = true;
-                    btnScanLargeFiles.Content = "🔍 Scan for Large Files";
-                    ApplyLargeFileFilter(currentMinLargeFileBytes);
-                }));
-            }));
-        }
-
-        static void ApplyLargeFileFilter(long minBytes) {
-            currentMinLargeFileBytes = minBytes;
-            pnlLargeFiles.Children.Clear();
-
-            var filtered = allLargeFiles.FindAll(x => x.Bytes >= minBytes);
-            txtLargeFilesSummary.Text = string.Format("Found {0} files matching size filter.", filtered.Count);
-
-            if (filtered.Count == 0) {
-                TextBlock empty = new TextBlock();
-                empty.Text = "No large files matching this filter were found in scanned folders.";
-                empty.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
-                empty.Margin = new Thickness(0, 20, 0, 0);
-                pnlLargeFiles.Children.Add(empty);
-                return;
-            }
-
-            foreach (var item in filtered) {
-                Border card = new Border();
-                card.Background = CardBgBrush();
-                card.BorderBrush = CardBorderBrush();
-                card.BorderThickness = new Thickness(1);
-                card.Padding = new Thickness(14, 10, 14, 10);
-                card.Margin = new Thickness(0, 0, 0, 7);
-                card.CornerRadius = new CornerRadius(10);
-
-                card.MouseEnter += (s, e) => {
-                    card.Background = CardHoverBrush();
-                    card.BorderBrush = CardHoverBorderBrush();
-                };
-                card.MouseLeave += (s, e) => {
-                    card.Background = CardBgBrush();
-                    card.BorderBrush = CardBorderBrush();
-                };
-
-                Grid grid = new Grid();
-                grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-                grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-
-                // Extension Badge
-                Border extBadge = new Border();
-                extBadge.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1B, 0x4B));
-                extBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
-                extBadge.BorderThickness = new Thickness(1);
-                extBadge.CornerRadius = new CornerRadius(6);
-                extBadge.Padding = new Thickness(6, 4, 6, 4);
-                extBadge.Margin = new Thickness(0, 0, 12, 0);
-                extBadge.VerticalAlignment = VerticalAlignment.Center;
-
-                TextBlock txtExt = new TextBlock();
-                txtExt.Text = string.IsNullOrEmpty(item.Extension) ? "FILE" : item.Extension;
-                txtExt.FontSize = 10;
-                txtExt.FontWeight = FontWeights.Bold;
-                txtExt.Foreground = new SolidColorBrush(Color.FromRgb(0xA5, 0xB4, 0xFC));
-                extBadge.Child = txtExt;
-
-                Grid.SetColumn(extBadge, 0);
-                grid.Children.Add(extBadge);
-
-                StackPanel sp = new StackPanel();
-                TextBlock name = new TextBlock();
-                name.Text = item.FileName;
-                name.FontWeight = FontWeights.Bold;
-                name.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC));
-                name.FontSize = 13;
-
-                TextBlock path = new TextBlock();
-                path.Text = item.FilePath;
-                path.FontSize = 11;
-                path.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
-                path.TextTrimming = TextTrimming.CharacterEllipsis;
-                path.MaxWidth = 550;
-
-                sp.Children.Add(name);
-                sp.Children.Add(path);
-                Grid.SetColumn(sp, 1);
-                grid.Children.Add(sp);
-
-                StackPanel rightSp = new StackPanel();
-                rightSp.Orientation = Orientation.Horizontal;
-                rightSp.VerticalAlignment = VerticalAlignment.Center;
-
-                Border sizeBadge = new Border();
-                sizeBadge.Background = new SolidColorBrush(Color.FromRgb(0x23, 0x1B, 0x4D));
-                sizeBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x4C, 0x3F, 0x9E));
-                sizeBadge.BorderThickness = new Thickness(1);
-                sizeBadge.Padding = new Thickness(10, 4, 10, 4);
-                sizeBadge.CornerRadius = new CornerRadius(11);
-                sizeBadge.Margin = new Thickness(0, 0, 8, 0);
-
-                TextBlock txtSize = new TextBlock();
-                txtSize.Text = item.SizeMB > 1024 ? string.Format("{0:F2} GB", item.SizeMB / 1024.0) : string.Format("{0:F0} MB", item.SizeMB);
-                txtSize.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x84, 0xFC));
-                txtSize.FontWeight = FontWeights.Bold;
-                txtSize.FontSize = 11;
-                sizeBadge.Child = txtSize;
-
-                Button btnShow = new Button();
-                btnShow.Style = (Style)mainWindow.TryFindResource("SecondaryBtn");
-                btnShow.Content = "Open Folder";
-                btnShow.Background = new SolidColorBrush(Color.FromRgb(0x16, 0x20, 0x32));
-                btnShow.Foreground = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1));
-                btnShow.BorderThickness = new Thickness(1);
-                btnShow.BorderBrush = new SolidColorBrush(Color.FromRgb(0x22, 0x2F, 0x48));
-                btnShow.Padding = new Thickness(10, 4, 10, 4);
-                btnShow.FontSize = 11;
-                btnShow.Cursor = Cursors.Hand;
-                btnShow.Margin = new Thickness(0, 0, 6, 0);
-                btnShow.Click += (s, e) => {
-                    try { Process.Start("explorer.exe", string.Format("/select,\"{0}\"", item.FilePath)); } catch { }
-                };
-
-                Button btnDeleteFile = new Button();
-                btnDeleteFile.Style = (Style)mainWindow.TryFindResource("SecondaryBtn");
-                btnDeleteFile.Content = "Delete";
-                btnDeleteFile.Background = new SolidColorBrush(Color.FromRgb(0x3B, 0x18, 0x22));
-                btnDeleteFile.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
-                btnDeleteFile.BorderThickness = new Thickness(0);
-                btnDeleteFile.Padding = new Thickness(10, 4, 10, 4);
-                btnDeleteFile.FontSize = 11;
-                btnDeleteFile.Cursor = Cursors.Hand;
-                btnDeleteFile.Click += (s, e) => {
-                    if (MessageBox.Show(mainWindow, "Are you sure you want to permanently delete this file?\r\n" + item.FilePath, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes) {
-                        try {
-                            File.Delete(item.FilePath);
-                            card.Visibility = Visibility.Collapsed;
-                            allLargeFiles.Remove(item);
-                            Log("Deleted large file: " + item.FilePath);
-                        } catch (Exception ex) {
-                            Log("Delete error: " + ex.Message);
-                        }
-                    }
-                };
-
-                rightSp.Children.Add(sizeBadge);
-                rightSp.Children.Add(btnShow);
-                rightSp.Children.Add(btnDeleteFile);
-                Grid.SetColumn(rightSp, 2);
-                grid.Children.Add(rightSp);
-
-                card.Child = grid;
-                pnlLargeFiles.Children.Add(card);
-            }
-        }
-
-        // ================= TAB 2: DUPLICATE FINDER =================
-        // Full-file SHA-256: the UI and README promise "100% byte-level
-        // certainty", so the whole stream must be hashed - not just a prefix.
-        static string GetFileHash(string path) {
-            try {
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var sha = SHA256.Create()) {
-                    return BitConverter.ToString(sha.ComputeHash(fs));
-                }
-            } catch { return Guid.NewGuid().ToString(); }
-        }
-
-        static void ScanDuplicatesAsync() {
-            btnScanDuplicates.IsEnabled = false;
-            btnScanDuplicates.Content = "Scanning Duplicates...";
-            pnlDuplicates.Children.Clear();
-            txtDuplicatesSummary.Text = "Scanning Downloads, Documents, and Pictures for duplicate matches...";
-
-            Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string[] searchDirs = new string[] {
-                    Path.Combine(userProfile, "Downloads"),
-                    Path.Combine(userProfile, "Documents"),
-                    Path.Combine(userProfile, "Pictures")
-                };
-
-                var sizeMap = new Dictionary<long, List<FileInfo>>();
-                foreach (var dirPath in searchDirs) {
-                    if (Directory.Exists(dirPath)) {
-                        try {
-                            foreach (var f in Directory.GetFiles(dirPath, "*.*", SearchOption.AllDirectories)) {
-                                try {
-                                    var fi = new FileInfo(f);
-                                    if (fi.Length > 512 * 1024) { // > 512 KB
-                                        if (!sizeMap.ContainsKey(fi.Length)) sizeMap[fi.Length] = new List<FileInfo>();
-                                        sizeMap[fi.Length].Add(fi);
-                                    }
-                                } catch { }
-                            }
-                        } catch { }
-                    }
-                }
-
-                var matchedGroups = new List<DuplicateFileGroup>();
-                foreach (var pair in sizeMap) {
-                    if (pair.Value.Count > 1) {
-                        var hashMap = new Dictionary<string, List<string>>();
-                        foreach (var fi in pair.Value) {
-                            string h = GetFileHash(fi.FullName);
-                            if (!hashMap.ContainsKey(h)) hashMap[h] = new List<string>();
-                            hashMap[h].Add(fi.FullName);
-                        }
-
-                        foreach (var hPair in hashMap) {
-                            if (hPair.Value.Count > 1) {
-                                matchedGroups.Add(new DuplicateFileGroup {
-                                    Hash = hPair.Key,
-                                    Bytes = pair.Key,
-                                    SizeMB = pair.Key / (1024.0 * 1024.0),
-                                    FilePaths = hPair.Value
-                                });
-                            }
-                        }
-                    }
-                }
-
-                duplicateGroups = matchedGroups;
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    btnScanDuplicates.IsEnabled = true;
-                    btnScanDuplicates.Content = "🔎 Find Duplicates";
-
-                    long totalWastedBytes = 0;
-                    foreach (var g in matchedGroups) {
-                        totalWastedBytes += g.Bytes * (g.FilePaths.Count - 1);
-                    }
-                    double wastedMB = totalWastedBytes / (1024.0 * 1024.0);
-                    string wastedStr = wastedMB > 1024 ? string.Format("{0:F2} GB", wastedMB / 1024.0) : string.Format("{0:F1} MB", wastedMB);
-
-                    txtDuplicatesSummary.Text = string.Format("Found {0} duplicate groups ({1} redundant storage can be recovered).", matchedGroups.Count, wastedStr);
-
-                    if (matchedGroups.Count == 0) {
-                        TextBlock empty = new TextBlock();
-                        empty.Text = "Zero duplicate files found. Scanned directories are clean.";
-                        empty.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
-                        empty.Margin = new Thickness(0, 20, 0, 0);
-                        pnlDuplicates.Children.Add(empty);
-                        return;
-                    }
-
-                    foreach (var group in matchedGroups) {
-                        Border groupBorder = new Border();
-                        groupBorder.Background = CardBgBrush();
-                        groupBorder.BorderBrush = CardBorderBrush();
-                        groupBorder.BorderThickness = new Thickness(1);
-                        groupBorder.Padding = new Thickness(14);
-                        groupBorder.Margin = new Thickness(0, 0, 0, 10);
-                        groupBorder.CornerRadius = new CornerRadius(10);
-
-                        StackPanel groupSp = new StackPanel();
-
-                        Grid headerGrid = new Grid();
-                        headerGrid.Margin = new Thickness(0, 0, 0, 8);
-                        TextBlock grpTitle = new TextBlock();
-                        grpTitle.Text = string.Format("Matched Size: {0:F1} MB • Hash: {1}...", group.SizeMB, group.Hash.Substring(0, Math.Min(12, group.Hash.Length)));
-                        grpTitle.FontWeight = FontWeights.Bold;
-                        grpTitle.FontSize = 12;
-                        grpTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
-                        headerGrid.Children.Add(grpTitle);
-                        groupSp.Children.Add(headerGrid);
-
-                        for (int i = 0; i < group.FilePaths.Count; i++) {
-                            string p = group.FilePaths[i];
-                            Border itemCard = new Border();
-                            itemCard.Background = new SolidColorBrush(Color.FromRgb(0x11, 0x18, 0x2B));
-                            itemCard.Padding = new Thickness(10, 6, 10, 6);
-                            itemCard.Margin = new Thickness(0, 0, 0, 4);
-                            itemCard.CornerRadius = new CornerRadius(6);
-
-                            Grid itemGrid = new Grid();
-                            itemGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-                            itemGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-
-                            TextBlock itemPath = new TextBlock();
-                            itemPath.Text = (i == 0 ? "🛡️ [ORIGINAL] " : "📑 [COPY] ") + p;
-                            itemPath.FontSize = 11;
-                            itemPath.Foreground = (i == 0) ? new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99)) : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
-                            itemPath.TextTrimming = TextTrimming.CharacterEllipsis;
-                            Grid.SetColumn(itemPath, 0);
-                            itemGrid.Children.Add(itemPath);
-
-                            Button btnDel = new Button();
-                            btnDel.Style = (Style)mainWindow.TryFindResource("SecondaryBtn");
-                            btnDel.Content = (i == 0 ? "Reveal" : "Delete");
-                            btnDel.Background = (i == 0) ? new SolidColorBrush(Color.FromRgb(0x16, 0x20, 0x32)) : new SolidColorBrush(Color.FromRgb(0x3B, 0x18, 0x22));
-                            btnDel.Foreground = (i == 0) ? new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)) : new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
-                            btnDel.BorderThickness = new Thickness(0);
-                            btnDel.Padding = new Thickness(10, 2, 10, 2);
-                            btnDel.FontSize = 10;
-                            btnDel.Cursor = Cursors.Hand;
-
-                            string capturedPath = p;
-                            bool isOriginal = (i == 0);
-                            btnDel.Click += (s, e) => {
-                                if (isOriginal) {
-                                    try { Process.Start("explorer.exe", string.Format("/select,\"{0}\"", capturedPath)); } catch { }
-                                } else {
-                                    if (MessageBox.Show(mainWindow, "Are you sure you want to delete this duplicate copy?\r\n" + capturedPath, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes) {
-                                        try {
-                                            File.Delete(capturedPath);
-                                            itemCard.Visibility = Visibility.Collapsed;
-                                            Log("Deleted duplicate file: " + capturedPath);
-                                        } catch (Exception ex) {
-                                            Log("Delete error: " + ex.Message);
-                                        }
-                                    }
-                                }
-                            };
-
-                            Grid.SetColumn(btnDel, 1);
-                            itemGrid.Children.Add(btnDel);
-
-                            itemCard.Child = itemGrid;
-                            groupSp.Children.Add(itemCard);
-                        }
-
-                        groupBorder.Child = groupSp;
-                        pnlDuplicates.Children.Add(groupBorder);
-                    }
-                }));
-            }));
-        }
-
-        static void CleanAllDuplicatesAsync() {
-            if (duplicateGroups.Count == 0) {
-                MessageBox.Show(mainWindow, "No duplicates have been discovered yet. Run 'Find Duplicates' first.", "OmniClean", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            int count = 0;
-            long bytes = 0;
-            foreach (var g in duplicateGroups) {
-                if (g.FilePaths.Count > 1) {
-                    count += (g.FilePaths.Count - 1);
-                    bytes += g.Bytes * (g.FilePaths.Count - 1);
-                }
-            }
-
-            if (count == 0) {
-                MessageBox.Show(mainWindow, "Zero duplicate copies available to remove.", "OmniClean", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            double mb = bytes / (1024.0 * 1024.0);
-            string sizeStr = mb > 1024 ? string.Format("{0:F2} GB", mb / 1024.0) : string.Format("{0:F1} MB", mb);
-
-            if (MessageBox.Show(mainWindow, string.Format("Safely purge {0} duplicate copies to reclaim {1}?\r\n\r\nOriginal files will be 100% preserved.", count, sizeStr), "Confirm Safe Duplicate Cleanup", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes) {
-                int deleted = 0;
-                foreach (var g in duplicateGroups) {
-                    for (int i = 1; i < g.FilePaths.Count; i++) {
-                        try {
-                            File.Delete(g.FilePaths[i]);
-                            deleted++;
-                        } catch { }
-                    }
-                }
-                Log(string.Format("Safe Duplicate Cleanup: Removed {0} duplicate copies, reclaiming {1}.", deleted, sizeStr));
-                ScanDuplicatesAsync();
-            }
-        }
-
-        // ================= TAB 3: STARTUP APPS OPTIMIZER =================
-        static void ScanStartupAppsAsync() {
-            btnScanStartup.IsEnabled = false;
-            pnlStartupApps.Children.Clear();
-            txtStartupSummary.Text = "Scanning Windows Registry startup entries...";
-
-            Task.Run(new Action(() => {
-                var list = new List<StartupAppItem>();
-
-                try {
-                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
-                        if (key != null) {
-                            foreach (var valName in key.GetValueNames()) {
-                                list.Add(new StartupAppItem {
-                                    Name = valName,
-                                    Command = key.GetValue(valName).ToString(),
-                                    IsEnabled = true
-                                });
-                            }
-                        }
-                    }
-                } catch { }
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    startupApps = list;
-                    btnScanStartup.IsEnabled = true;
-                    txtStartupSummary.Text = string.Format("Found {0} active startup programs configured in user registry.", list.Count);
-
-                    if (list.Count == 0) {
-                        TextBlock empty = new TextBlock();
-                        empty.Text = "No active startup applications found in user profile.";
-                        empty.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
-                        empty.Margin = new Thickness(0, 20, 0, 0);
-                        pnlStartupApps.Children.Add(empty);
-                        return;
-                    }
-
-                    foreach (var app in list) {
-                        Border card = new Border();
-                        card.Background = CardBgBrush();
-                        card.BorderBrush = CardBorderBrush();
-                        card.BorderThickness = new Thickness(1);
-                        card.Padding = new Thickness(14, 10, 14, 10);
-                        card.Margin = new Thickness(0, 0, 0, 8);
-                        card.CornerRadius = new CornerRadius(10);
-
-                        card.MouseEnter += (s, e) => {
-                            card.Background = CardHoverBrush();
-                            card.BorderBrush = CardHoverBorderBrush();
-                        };
-                        card.MouseLeave += (s, e) => {
-                            card.Background = CardBgBrush();
-                            card.BorderBrush = CardBorderBrush();
-                        };
-
-                        Grid grid = new Grid();
-                        grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-                        grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-
-                        StackPanel sp = new StackPanel();
-                        TextBlock name = new TextBlock();
-                        name.Text = app.Name;
-                        name.FontWeight = FontWeights.Bold;
-                        name.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC));
-                        name.FontSize = 13;
-
-                        TextBlock cmd = new TextBlock();
-                        cmd.Text = app.Command;
-                        cmd.FontSize = 11;
-                        cmd.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
-                        cmd.TextTrimming = TextTrimming.CharacterEllipsis;
-                        cmd.MaxWidth = 550;
-
-                        sp.Children.Add(name);
-                        sp.Children.Add(cmd);
-                        Grid.SetColumn(sp, 0);
-                        grid.Children.Add(sp);
-
-                        Button btnToggle = new Button();
-                        btnToggle.Content = "● ACTIVE";
-                        btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x06, 0x4E, 0x3B));
-                        btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
-                        btnToggle.BorderThickness = new Thickness(1);
-                        btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-                        btnToggle.Padding = new Thickness(14, 5, 14, 5);
-                        btnToggle.FontSize = 11;
-                        btnToggle.FontWeight = FontWeights.Bold;
-                        btnToggle.Cursor = Cursors.Hand;
-
-                        StartupAppItem capturedApp = app;
-                        btnToggle.Click += (s, e) => {
-                            capturedApp.IsEnabled = !capturedApp.IsEnabled;
-                            if (capturedApp.IsEnabled) {
-                                btnToggle.Content = "● ACTIVE";
-                                btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x06, 0x4E, 0x3B));
-                                btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
-                                btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-                                try {
-                                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                                        key.SetValue(capturedApp.Name, capturedApp.Command);
-                                    }
-                                    Log("Enabled startup app: " + capturedApp.Name);
-                                } catch (Exception ex) { Log("Toggle error: " + ex.Message); }
-                            } else {
-                                btnToggle.Content = "○ DISABLED";
-                                btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x29, 0x37));
-                                btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-                                btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51));
-                                try {
-                                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                                        key.DeleteValue(capturedApp.Name, false);
-                                    }
-                                    Log("Disabled startup app: " + capturedApp.Name);
-                                } catch (Exception ex) { Log("Toggle error: " + ex.Message); }
-                            }
-                        };
-
-                        Grid.SetColumn(btnToggle, 1);
-                        grid.Children.Add(btnToggle);
-
-                        card.Child = grid;
-                        pnlStartupApps.Children.Add(card);
-                    }
-                }));
-            }));
-        }
-
         // ================= HEADLESS SILENT CLEANUP =================
         static void PerformSilentCleanup() {
             try {
+                BeginCleanManifest(false);
                 SHEmptyRecycleBin(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+                Manifest("[RECYCLE-BIN] emptied by scheduled silent clean");
                 string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
                 CleanFolder(Path.GetTempPath(), false);
                 CleanFolder(Path.Combine(winDir, "Temp"), false);
@@ -2431,7 +1851,11 @@ namespace OmniClean {
                     CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), false);
                     CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), false);
                 }
-            } catch { }
+            } catch (Exception ex) {
+                Manifest("[ERROR] silent clean aborted -- " + ex.Message);
+            } finally {
+                EndCleanManifest("Scheduled silent clean finished: " + cleanDeletedCount + " items removed, " + cleanFailedCount + " failures.");
+            }
         }
     }
 }

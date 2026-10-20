@@ -1,6 +1,6 @@
 # OmniClean
 
-Version: 1.0.3
+Version: 1.0.4
 Universal Windows Storage Optimizer and Performance Utility.
 
 OmniClean is a native, lightweight Windows desktop application engineered to inspect system drives, reclaim disk space from redundant caches, discover large or duplicate files, trim idle memory working sets, and optimize overall system responsiveness. It ships as a single standalone executable with zero external runtime dependencies (native edition), plus an optional local web edition.
@@ -13,6 +13,8 @@ OmniClean ships in two editions that share the same goals:
 | **Web** | `Launch.bat` (starts `server.js` + browser UI in `public/`) | Node.js backend, PowerShell engine (`scan.ps1`, `cleaner.ps1`, `targets.ps1`), browser front end |
 
 The capabilities matrix below describes the native edition in full; the web edition's feature set, API and security model are documented in the [Web Edition](#web-edition) section.
+
+![OmniClean v1.0.4 dashboard](docs/screenshot.png)
 
 ---
 
@@ -73,6 +75,13 @@ The capabilities matrix below describes the native edition in full; the web edit
 10. **Hardware and System Telemetry HUD**
     - Identifies processor architecture, core counts, CPU model, total physical RAM, and live system uptime without requiring external diagnostic tools.
 
+11. **Safety, Auditability, and Control (v1.0.4)**
+    - Every cleanup asks for confirmation with an impact summary (selected targets + estimated reclaim) before anything is deleted.
+    - Each run writes a deletion manifest to `%APPDATA%\OmniClean\logs\` recording every removed item, every failure with its reason, and a final summary - fully auditable cleanups.
+    - Large-file and duplicate scans can be stopped at any time with dedicated Stop buttons.
+    - A single-instance guard prevents two OmniClean windows from scanning or cleaning concurrently.
+    - Unhandled errors are captured to crash logs instead of closing silently.
+
 ---
 
 ### What OmniClean Does Not Do (Safety Boundaries)
@@ -106,10 +115,11 @@ OmniClean is intentionally engineered with strict safety constraints to prevent 
 ## Technical Architecture
 
 - **Language**: C# 5 / .NET Framework 4.5+ (Natively pre-installed on Windows 10, Windows 11, and Windows Server).
-- **GUI Engine**: Windows Presentation Foundation (WPF) with dark theme and hardware acceleration.
+- **GUI Engine**: Windows Presentation Foundation (WPF) with dark theme and hardware acceleration (native DWM rounded corners and drop shadow on Windows 11).
+- **Source Layout**: Three partial-class files - `OmniClean.cs` (window, embedded XAML UI, and wiring), `OmniClean.Engine.cs` (cleanup pipeline and deletion audit trail), `OmniClean.Analysis.cs` (large files, duplicates, startup optimizer).
 - **Navigation Layout**: Left Sidebar navigation with active indicator bars and dedicated workspace canvas.
 - **Interactive Feedback**: Dynamic card hover effects with illumination highlights.
-- **Binary Footprint**: ~158 KB standalone executable with embedded application icon.
+- **Binary Footprint**: ~186 KB standalone executable with embedded application icon, DPI-aware manifest (Per-Monitor V2), and version metadata.
 - **External Dependencies**: Zero for the native executable. No NuGet dependencies, no Python runtime, and no Node.js runtime are required to build or run `OmniClean.exe` (Node.js is only needed for the optional Web Edition).
 - **Build System**: Compiles using the native Microsoft Visual C# compiler (`csc.exe`).
 
@@ -132,7 +142,8 @@ $wpfDir = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF"
 & $csc /target:winexe /platform:anycpu /optimize+ /lib:"$wpfDir" `
   /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll `
   /r:System.Xaml.dll /r:System.dll /r:System.Core.dll `
-  /win32icon:"app.ico" /out:"OmniClean.exe" "OmniClean.cs"
+  /win32icon:"app.ico" /win32manifest:"app.manifest" `
+  /out:"OmniClean.exe" "OmniClean.cs" "OmniClean.Engine.cs" "OmniClean.Analysis.cs"
 ```
 
 ---
@@ -143,6 +154,7 @@ $wpfDir = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF"
 | :--- | :--- |
 | `OmniClean.exe` | Launches the interactive graphical user interface. |
 | `OmniClean.exe --silent-clean` | Executes a headless, background cleanup of temporary caches without opening the GUI window. |
+| `OmniClean.exe --validate-xaml` | Parses the embedded UI markup and exits with code 0 (valid) or 1 (invalid); used by CI to catch UI regressions. |
 
 ---
 

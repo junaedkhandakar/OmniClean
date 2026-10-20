@@ -1,6 +1,6 @@
 {
   "name": "omniclean",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "OmniClean - Windows storage optimizer (web edition: Node.js backend, PowerShell engine, browser UI).",
   "private": true,
   "main": "server.js",

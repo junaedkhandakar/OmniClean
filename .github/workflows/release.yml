@@ -34,13 +34,21 @@ jobs:
           & $csc /target:winexe /platform:anycpu /optimize+ /lib:"$wpfDir" `
             /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll `
             /r:System.Xaml.dll /r:System.dll /r:System.Core.dll `
-            /win32icon:"app.ico" /out:"OmniClean.exe" "OmniClean.cs"
+            /win32icon:"app.ico" /win32manifest:"app.manifest" `
+            /out:"OmniClean.exe" "OmniClean.cs" "OmniClean.Engine.cs" "OmniClean.Analysis.cs"
 
           if (!(Test-Path "OmniClean.exe")) {
             throw "Build failed: OmniClean.exe was not created."
           }
 
           Get-Item OmniClean.exe | Select-Object Name, Length, LastWriteTime
+
+      - name: Generate SHA256 Checksums
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash OmniClean.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path SHA256SUMS.txt -Value "$hash *OmniClean.exe" -Encoding ascii
+          Get-Content SHA256SUMS.txt
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -64,7 +72,9 @@ jobs:
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: OmniClean ${{ steps.release_info.outputs.tag }}
-          files: OmniClean.exe
+          files: |
+            OmniClean.exe
+            SHA256SUMS.txt
           draft: false
           prerelease: false
           generate_release_notes: true
