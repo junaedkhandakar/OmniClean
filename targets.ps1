@@ -153,6 +153,11 @@ function Remove-OmniCleanTarget($target) {
         if (-not (Test-Path -LiteralPath $root)) { return 0 }
         $failed = 0
         Get-ChildItem -LiteralPath $root -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+                    $_.Attributes = [System.IO.FileAttributes]::Normal
+                }
+            } catch {}
             $errs = $null
             Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable errs
             $failed += Count-Errors $errs
@@ -162,7 +167,11 @@ function Remove-OmniCleanTarget($target) {
 
     switch ($target.kind) {
         'recycle' {
-            $locked += Remove-Children (Get-OmniCleanRecyclePath)
+            try {
+                Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+            } catch {
+                $locked += Remove-Children (Get-OmniCleanRecyclePath)
+            }
         }
         'capcut_old' {
             foreach ($old in (Get-OmniCleanCapCutOldVersions)) {

@@ -76,6 +76,16 @@ namespace OmniClean {
         const uint SHERB_NOPROGRESSUI   = 0x00000002;
         const uint SHERB_NOSOUND        = 0x00000004;
 
+        [StructLayout(LayoutKind.Sequential, Pack = 4)]
+        public struct SHQUERYRBINFO {
+            public int cbSize;
+            public long i64Size;
+            public long i64NumItems;
+        }
+
+        [DllImport("Shell32.dll", CharSet = CharSet.Unicode)]
+        static extern int SHQueryRecycleBin(string pszRootPath, ref SHQUERYRBINFO pSHQueryRBInfo);
+
         [DllImport("psapi.dll")]
         static extern int EmptyWorkingSet(IntPtr hwProc);
 

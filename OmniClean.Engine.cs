@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -12,19 +14,85 @@ using System.Windows.Media;
 
 namespace OmniClean {
     partial class Program {
+        static bool IsAdministrator() {
+            try {
+                var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            } catch { return false; }
+        }
+
         static double GetDirectorySizeMB(string path) {
-            if (!Directory.Exists(path)) return 0;
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
             double bytes = 0;
             try {
-                string[] files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                foreach (var f in files) {
+                var stack = new Stack<string>();
+                stack.Push(path);
+                while (stack.Count > 0) {
+                    string current = stack.Pop();
                     try {
-                        FileInfo fi = new FileInfo(f);
-                        bytes += fi.Length;
+                        string[] files = Directory.GetFiles(current);
+                        for (int i = 0; i < files.Length; i++) {
+                            try {
+                                bytes += new FileInfo(files[i]).Length;
+                            } catch { }
+                        }
+                    } catch { }
+                    try {
+                        string[] dirs = Directory.GetDirectories(current);
+                        for (int i = 0; i < dirs.Length; i++) {
+                            stack.Push(dirs[i]);
+                        }
                     } catch { }
                 }
             } catch { }
             return bytes / (1024.0 * 1024.0);
+        }
+
+        static List<string> GetBrowserCachePaths(string localApp, string appData) {
+            var paths = new List<string>();
+
+            // Chromium based (Chrome, Edge, Brave): scan all user profiles (Default, Profile 1, etc.)
+            string[] chromiumUsers = new string[] {
+                Path.Combine(localApp, @"Google\Chrome\User Data"),
+                Path.Combine(localApp, @"Microsoft\Edge\User Data"),
+                Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data")
+            };
+            foreach (var uDir in chromiumUsers) {
+                if (!Directory.Exists(uDir)) continue;
+                try {
+                    foreach (var pDir in Directory.GetDirectories(uDir)) {
+                        string name = Path.GetFileName(pDir);
+                        if (name.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Profile ", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Guest", StringComparison.OrdinalIgnoreCase)) {
+                            paths.Add(Path.Combine(pDir, "Cache"));
+                            paths.Add(Path.Combine(pDir, "Code Cache"));
+                            paths.Add(Path.Combine(pDir, "GPUCache"));
+                        }
+                    }
+                } catch { }
+            }
+
+            // Opera and Opera GX
+            paths.Add(Path.Combine(localApp, @"Opera Software\Opera Stable\Cache"));
+            paths.Add(Path.Combine(localApp, @"Opera Software\Opera GX Stable\Cache"));
+            paths.Add(Path.Combine(appData, @"Opera Software\Opera Stable\GPUCache"));
+            paths.Add(Path.Combine(appData, @"Opera Software\Opera GX Stable\GPUCache"));
+
+            // Firefox
+            string ffProfiles = Path.Combine(localApp, @"Mozilla\Firefox\Profiles");
+            if (Directory.Exists(ffProfiles)) {
+                try {
+                    foreach (var p in Directory.GetDirectories(ffProfiles)) {
+                        paths.Add(Path.Combine(p, "cache2"));
+                        paths.Add(Path.Combine(p, "startupCache"));
+                        paths.Add(Path.Combine(p, "jumpListCache"));
+                    }
+                } catch { }
+            }
+
+            return paths;
         }
 
         static void RunScanAsync() {
@@ -56,18 +124,22 @@ namespace OmniClean {
                         if (cat.Id == "recycle_bin") {
                             size = 0;
                             try {
-                                string binPath = selectedDriveLetter + @":\$Recycle.Bin";
-                                size = GetDirectorySizeMB(binPath);
+                                SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
+                                rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
+                                string root = selectedDriveLetter + @":\";
+                                if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
+                                    size = rbInfo.i64Size / (1024.0 * 1024.0);
+                                } else {
+                                    size = GetDirectorySizeMB(selectedDriveLetter + @":\$Recycle.Bin");
+                                }
                             } catch { }
                         } else if (cat.Id == "temp_files") {
                             size += GetDirectorySizeMB(Path.GetTempPath());
                             size += GetDirectorySizeMB(Path.Combine(winDir, "Temp"));
                         } else if (cat.Id == "browser_cache") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Google\Chrome\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data\Default\Cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Mozilla\Firefox\Profiles"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"Opera Software\Opera Stable\Cache"));
+                            foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
+                                size += GetDirectorySizeMB(bPath);
+                            }
                         } else if (cat.Id == "win_update") {
                             size = GetDirectorySizeMB(Path.Combine(winDir, @"SoftwareDistribution\Download"));
                         } else if (cat.Id == "crash_dumps") {
@@ -103,6 +175,9 @@ namespace OmniClean {
                                 size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedExtensionVSIXs"));
                                 size += GetDirectorySizeMB(Path.Combine(vscPath, @"Crashpad\reports"));
                                 size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedData"));
+                                size += GetDirectorySizeMB(Path.Combine(vscPath, "Cache"));
+                                size += GetDirectorySizeMB(Path.Combine(vscPath, "Code Cache"));
+                                size += GetDirectorySizeMB(Path.Combine(vscPath, "GPUCache"));
                             } else {
                                 installed = false;
                             }
@@ -110,9 +185,11 @@ namespace OmniClean {
                             size += GetDirectorySizeMB(Path.Combine(localApp, "npm-cache"));
                             size += GetDirectorySizeMB(Path.Combine(localApp, @"pip\cache"));
                         } else if (cat.Id == "discord_cache") {
-                            string dsc = Path.Combine(appData, @"discord\Cache");
+                            string dsc = Path.Combine(appData, "discord");
                             if (Directory.Exists(dsc)) {
-                                size = GetDirectorySizeMB(dsc);
+                                size += GetDirectorySizeMB(Path.Combine(dsc, "Cache"));
+                                size += GetDirectorySizeMB(Path.Combine(dsc, "Code Cache"));
+                                size += GetDirectorySizeMB(Path.Combine(dsc, "GPUCache"));
                             } else {
                                 installed = false;
                             }
@@ -155,7 +232,7 @@ namespace OmniClean {
 
             bool isDryRun = (chkDryRun.IsChecked == true);
 
-            // v1.0.4: explicit confirmation with an impact summary before anything is deleted.
+            // Explicit confirmation with an impact summary before anything is deleted.
             int selectedCount = 0;
             double selectedMB = 0;
             foreach (var c in categories) {
@@ -170,9 +247,9 @@ namespace OmniClean {
             }
             string selectedStr = selectedMB > 1024 ? string.Format("{0:F2} GB", selectedMB / 1024.0) : string.Format("{0:F1} MB", selectedMB);
             string prompt = isDryRun
-                ? string.Format("Preview Mode is ON - nothing will be deleted.\r\n\r\nSimulate cleanup of {0} selected targets (~{1} estimated)?", selectedCount, selectedStr)
+                ? string.Format("Preview Mode is ON (Dry Run) - nothing will be deleted.\r\n\r\nSimulate cleanup of {0} selected targets (~{1} estimated)?", selectedCount, selectedStr)
                 : string.Format("This will PERMANENTLY delete temporary files from {0} selected targets (~{1} estimated).\r\n\r\nA deletion manifest will be saved so every removed item stays auditable.\r\n\r\nContinue?", selectedCount, selectedStr);
-            if (MessageBox.Show(mainWindow, prompt, isDryRun ? "Confirm Preview Run" : "Confirm Cleanup", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) {
+            if (MessageBox.Show(mainWindow, prompt, isDryRun ? "Confirm Preview Run (No Deletion)" : "Confirm Cleanup", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) {
                 return;
             }
 
@@ -199,8 +276,23 @@ namespace OmniClean {
                     try {
                         if (cat.Id == "recycle_bin") {
                             if (!isDryRun) {
-                                uint rbResult = SHEmptyRecycleBin(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-                                Manifest("[RECYCLE-BIN] SHEmptyRecycleBin returned 0x" + rbResult.ToString("X") + (rbResult == 0 ? " (success)" : " (locked or partial)"));
+                                SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
+                                rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
+                                string root = selectedDriveLetter + @":\";
+                                long preCount = 0;
+                                double preMB = 0;
+                                if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
+                                    preCount = rbInfo.i64NumItems;
+                                    preMB = rbInfo.i64Size / (1024.0 * 1024.0);
+                                }
+                                uint rbResult = SHEmptyRecycleBin(IntPtr.Zero, root, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+                                if (rbResult == 0) {
+                                    cleanDeletedCount += Math.Max(1, preCount);
+                                    cleanFreedMB += preMB;
+                                    Manifest(string.Format("[RECYCLE-BIN] Emptied {0} items, freed {1:F2} MB", preCount, preMB));
+                                } else {
+                                    Manifest("[RECYCLE-BIN] SHEmptyRecycleBin returned 0x" + rbResult.ToString("X") + " (locked or partial)");
+                                }
                             } else {
                                 Manifest("[PREVIEW] Recycle Bin on drive " + selectedDriveLetter + ":");
                             }
@@ -230,10 +322,8 @@ namespace OmniClean {
                                         if (d != latest) {
                                             try {
                                                 if (!isDryRun) {
-                                                    cleanFreedMB += GetDirectorySizeMB(d);
-                                                    Directory.Delete(d, true);
-                                                    cleanDeletedCount++;
-                                                    Manifest("[DELETED] " + d + " (recursive)");
+                                                    CleanFolder(d, false);
+                                                    try { Directory.Delete(d, true); } catch { }
                                                 } else {
                                                     Manifest("[PREVIEW] " + d + " (recursive)");
                                                 }
@@ -250,11 +340,17 @@ namespace OmniClean {
                             CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), isDryRun);
                             CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), isDryRun);
                             CleanFolder(Path.Combine(vscPath, "CachedData"), isDryRun);
+                            CleanFolder(Path.Combine(vscPath, "Cache"), isDryRun);
+                            CleanFolder(Path.Combine(vscPath, "Code Cache"), isDryRun);
+                            CleanFolder(Path.Combine(vscPath, "GPUCache"), isDryRun);
                         } else if (cat.Id == "dev_cache") {
                             CleanFolder(Path.Combine(localApp, "npm-cache"), isDryRun);
                             CleanFolder(Path.Combine(localApp, @"pip\cache"), isDryRun);
                         } else if (cat.Id == "discord_cache") {
-                            CleanFolder(Path.Combine(appData, @"discord\Cache"), isDryRun);
+                            string dsc = Path.Combine(appData, "discord");
+                            CleanFolder(Path.Combine(dsc, "Cache"), isDryRun);
+                            CleanFolder(Path.Combine(dsc, "Code Cache"), isDryRun);
+                            CleanFolder(Path.Combine(dsc, "GPUCache"), isDryRun);
                         }
                     } catch (Exception ex) {
                         Log("Warning: " + ex.Message);
@@ -272,17 +368,21 @@ namespace OmniClean {
                     EndCleanManifest(isDryRun ? "Preview finished - nothing was deleted." : "Summary: " + summary);
 
                     if (isDryRun) {
-                        Log("Simulation finished. No files were modified.");
+                        Log("Simulation finished. No files were modified (Dry Run active).");
                     } else {
                         Log("Cleanup finished: " + summary + ".");
                         Log("Deletion manifest: " + lastCleanLogPath);
                         if (cleanFailedCount > 0) {
-                            Log("Some items could not be removed (in use or access denied) - see manifest for details.");
+                            if (!IsAdministrator()) {
+                                Log("Note: Some files could not be removed (in use by running apps, or system folders requiring Administrator privileges).");
+                            } else {
+                                Log("Some items could not be removed (files currently locked by running applications) - see manifest for details.");
+                            }
                         }
                     }
                     bannerSuccess.Visibility = Visibility.Visible;
                     txtSuccessMsg.Text = isDryRun
-                        ? "Simulation complete. Storage preview calculated."
+                        ? "Simulation complete (Dry Run): 0 files deleted. Uncheck 'Dry Run' to delete files."
                         : string.Format("Cleanup complete - {0} removed, {1} freed.", cleanDeletedCount, freedStr);
                     RunScanAsync();
                 }));
@@ -290,86 +390,107 @@ namespace OmniClean {
         }
 
         static void CleanFolder(string path, bool isDryRun) {
-            if (!Directory.Exists(path)) return;
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return;
+            CleanFolderRecursive(path, isDryRun);
+        }
+
+        static void CleanFolderRecursive(string currentDir, bool isDryRun) {
             try {
-                foreach (var f in Directory.GetFiles(path)) {
-                    try {
-                        if (isDryRun) {
-                            Manifest("[PREVIEW] " + f);
-                        } else {
-                            FileInfo fi = new FileInfo(f);
-                            double mb = fi.Length / (1024.0 * 1024.0);
-                            File.Delete(f);
-                            cleanDeletedCount++;
-                            cleanFreedMB += mb;
-                            Manifest("[DELETED] " + f + string.Format(" ({0:F2} MB)", mb));
+                string[] files = null;
+                try {
+                    files = Directory.GetFiles(currentDir);
+                } catch (Exception ex) {
+                    cleanFailedCount++;
+                    Manifest("[FAILED]  Cannot list files in " + currentDir + " -- " + ex.Message);
+                }
+
+                if (files != null) {
+                    for (int i = 0; i < files.Length; i++) {
+                        string f = files[i];
+                        try {
+                            if (isDryRun) {
+                                Manifest("[PREVIEW] " + f);
+                            } else {
+                                FileInfo fi = new FileInfo(f);
+                                double mb = fi.Length / (1024.0 * 1024.0);
+                                if ((fi.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+                                    try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+                                }
+                                File.Delete(f);
+                                cleanDeletedCount++;
+                                cleanFreedMB += mb;
+                                Manifest("[DELETED] " + f + string.Format(" ({0:F2} MB)", mb));
+                            }
+                        } catch (Exception ex) {
+                            cleanFailedCount++;
+                            Manifest("[FAILED]  " + f + " -- " + ex.Message);
                         }
-                    } catch (Exception ex) {
-                        cleanFailedCount++;
-                        Manifest("[FAILED]  " + f + " -- " + ex.Message);
                     }
                 }
-                foreach (var d in Directory.GetDirectories(path)) {
-                    try {
-                        if (isDryRun) {
-                            Manifest("[PREVIEW] " + d + " (recursive)");
-                        } else {
-                            cleanFreedMB += GetDirectorySizeMB(d);
-                            Directory.Delete(d, true);
-                            cleanDeletedCount++;
-                            Manifest("[DELETED] " + d + " (recursive)");
+
+                string[] subDirs = null;
+                try {
+                    subDirs = Directory.GetDirectories(currentDir);
+                } catch (Exception ex) {
+                    cleanFailedCount++;
+                    Manifest("[FAILED]  Cannot list directories in " + currentDir + " -- " + ex.Message);
+                }
+
+                if (subDirs != null) {
+                    for (int i = 0; i < subDirs.Length; i++) {
+                        string d = subDirs[i];
+                        CleanFolderRecursive(d, isDryRun);
+                        if (!isDryRun) {
+                            try {
+                                if (Directory.GetFileSystemEntries(d).Length == 0) {
+                                    if ((File.GetAttributes(d) & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+                                        try { File.SetAttributes(d, FileAttributes.Normal); } catch { }
+                                    }
+                                    Directory.Delete(d, false);
+                                    cleanDeletedCount++;
+                                    Manifest("[DELETED] " + d + " (empty directory)");
+                                }
+                            } catch { }
                         }
-                    } catch (Exception ex) {
-                        cleanFailedCount++;
-                        Manifest("[FAILED]  " + d + " -- " + ex.Message);
                     }
                 }
             } catch (Exception ex) {
-                Manifest("[ERROR]   cannot enumerate " + path + " -- " + ex.Message);
+                Manifest("[ERROR]   Unexpected error in " + currentDir + " -- " + ex.Message);
             }
         }
 
         static void CleanBrowserCaches(bool isDryRun) {
             string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string[] browserCaches = new string[] {
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\Code Cache"),
-                Path.Combine(localApp, @"Google\Chrome\User Data\Default\GPUCache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\Code Cache"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data\Default\GPUCache"),
-                Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data\Default\Cache"),
-                Path.Combine(localApp, @"Opera Software\Opera Stable\Cache")
-            };
-
-            foreach (var bPath in browserCaches) {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
                 CleanFolder(bPath, isDryRun);
             }
         }
 
         static void CleanEmptyDirectories(string startLocation, bool isDryRun) {
+            if (string.IsNullOrEmpty(startLocation) || !Directory.Exists(startLocation)) return;
             try {
                 foreach (var d in Directory.GetDirectories(startLocation)) {
                     CleanEmptyDirectories(d, isDryRun);
-                    if (Directory.GetFiles(d).Length == 0 && Directory.GetDirectories(d).Length == 0) {
-                        try {
+                    try {
+                        if (Directory.GetFileSystemEntries(d).Length == 0) {
                             if (!isDryRun) {
+                                if ((File.GetAttributes(d) & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+                                    try { File.SetAttributes(d, FileAttributes.Normal); } catch { }
+                                }
                                 Directory.Delete(d, false);
                                 cleanDeletedCount++;
                                 Manifest("[DELETED] " + d + " (empty directory)");
                             } else {
                                 Manifest("[PREVIEW] " + d + " (empty directory)");
                             }
-                        } catch (Exception ex) {
-                            cleanFailedCount++;
-                            Manifest("[FAILED]  " + d + " -- " + ex.Message);
                         }
+                    } catch (Exception ex) {
+                        cleanFailedCount++;
+                        Manifest("[FAILED]  " + d + " -- " + ex.Message);
                     }
                 }
             } catch { }
         }
-
-
     }
 }
-
