@@ -110,120 +110,125 @@ namespace OmniClean {
             Log(string.Format("Scanning storage volume {0}: for cleanable caches...", selectedDriveLetter));
 
             Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                try {
+                    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                    string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-                foreach (var cat in categories) {
-                    double size = 0;
-                    bool installed = true;
+                    foreach (var cat in categories) {
+                        double size = 0;
+                        bool installed = true;
 
-                    try {
-                        if (cat.Id == "recycle_bin") {
-                            size = 0;
-                            try {
-                                SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
-                                rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
-                                string root = selectedDriveLetter + @":\";
-                                if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
-                                    size = rbInfo.i64Size / (1024.0 * 1024.0);
-                                } else {
-                                    size = GetDirectorySizeMB(selectedDriveLetter + @":\$Recycle.Bin");
-                                }
-                            } catch { }
-                        } else if (cat.Id == "temp_files") {
-                            size += GetDirectorySizeMB(Path.GetTempPath());
-                            size += GetDirectorySizeMB(Path.Combine(winDir, "Temp"));
-                        } else if (cat.Id == "browser_cache") {
-                            foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
-                                size += GetDirectorySizeMB(bPath);
-                            }
-                        } else if (cat.Id == "win_update") {
-                            size = GetDirectorySizeMB(Path.Combine(winDir, @"SoftwareDistribution\Download"));
-                        } else if (cat.Id == "crash_dumps") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, "CrashDumps"));
-                            size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"));
-                            size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"));
-                        } else if (cat.Id == "empty_folders") {
-                            size = 0.5;
-                        } else if (cat.Id == "nvidia_artifacts") {
-                            string ota = Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts");
-                            if (Directory.Exists(ota)) {
-                                size = GetDirectorySizeMB(ota);
-                            } else {
-                                installed = false;
-                            }
-                        } else if (cat.Id == "capcut_old") {
-                            string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                            if (Directory.Exists(capApps)) {
-                                var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                if (dirs.Count > 1) {
-                                    dirs.Sort();
-                                    string latest = dirs[dirs.Count - 1];
-                                    foreach (var d in dirs) {
-                                        if (d != latest) size += GetDirectorySizeMB(d);
+                        try {
+                            if (cat.Id == "recycle_bin") {
+                                size = 0;
+                                try {
+                                    SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
+                                    rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
+                                    string root = selectedDriveLetter + @":\";
+                                    if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
+                                        size = rbInfo.i64Size / (1024.0 * 1024.0);
+                                    } else {
+                                        size = GetDirectorySizeMB(selectedDriveLetter + @":\$Recycle.Bin");
                                     }
+                                } catch { }
+                            } else if (cat.Id == "temp_files") {
+                                size += GetDirectorySizeMB(Path.GetTempPath());
+                                size += GetDirectorySizeMB(Path.Combine(winDir, "Temp"));
+                            } else if (cat.Id == "browser_cache") {
+                                foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
+                                    size += GetDirectorySizeMB(bPath);
                                 }
-                            } else {
-                                installed = false;
+                            } else if (cat.Id == "win_update") {
+                                size = GetDirectorySizeMB(Path.Combine(winDir, @"SoftwareDistribution\Download"));
+                            } else if (cat.Id == "crash_dumps") {
+                                size += GetDirectorySizeMB(Path.Combine(localApp, "CrashDumps"));
+                                size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"));
+                                size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"));
+                            } else if (cat.Id == "empty_folders") {
+                                size = 0.5;
+                            } else if (cat.Id == "nvidia_artifacts") {
+                                string ota = Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts");
+                                if (Directory.Exists(ota)) {
+                                    size = GetDirectorySizeMB(ota);
+                                } else {
+                                    installed = false;
+                                }
+                            } else if (cat.Id == "capcut_old") {
+                                string capApps = Path.Combine(localApp, @"CapCut\Apps");
+                                if (Directory.Exists(capApps)) {
+                                    var dirs = new List<string>(Directory.GetDirectories(capApps));
+                                    if (dirs.Count > 1) {
+                                        dirs.Sort();
+                                        string latest = dirs[dirs.Count - 1];
+                                        foreach (var d in dirs) {
+                                            if (d != latest) size += GetDirectorySizeMB(d);
+                                        }
+                                    }
+                                } else {
+                                    installed = false;
+                                }
+                            } else if (cat.Id == "vscode_cache") {
+                                string vscPath = Path.Combine(appData, "Code");
+                                if (Directory.Exists(vscPath)) {
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedExtensionVSIXs"));
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, @"Crashpad\reports"));
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedData"));
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "Cache"));
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "Code Cache"));
+                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "GPUCache"));
+                                } else {
+                                    installed = false;
+                                }
+                            } else if (cat.Id == "dev_cache") {
+                                size += GetDirectorySizeMB(Path.Combine(localApp, "npm-cache"));
+                                size += GetDirectorySizeMB(Path.Combine(localApp, @"pip\cache"));
+                            } else if (cat.Id == "discord_cache") {
+                                string dsc = Path.Combine(appData, "discord");
+                                if (Directory.Exists(dsc)) {
+                                    size += GetDirectorySizeMB(Path.Combine(dsc, "Cache"));
+                                    size += GetDirectorySizeMB(Path.Combine(dsc, "Code Cache"));
+                                    size += GetDirectorySizeMB(Path.Combine(dsc, "GPUCache"));
+                                } else {
+                                    installed = false;
+                                }
                             }
-                        } else if (cat.Id == "vscode_cache") {
-                            string vscPath = Path.Combine(appData, "Code");
-                            if (Directory.Exists(vscPath)) {
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedExtensionVSIXs"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, @"Crashpad\reports"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedData"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "Cache"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "Code Cache"));
-                                size += GetDirectorySizeMB(Path.Combine(vscPath, "GPUCache"));
-                            } else {
-                                installed = false;
-                            }
-                        } else if (cat.Id == "dev_cache") {
-                            size += GetDirectorySizeMB(Path.Combine(localApp, "npm-cache"));
-                            size += GetDirectorySizeMB(Path.Combine(localApp, @"pip\cache"));
-                        } else if (cat.Id == "discord_cache") {
-                            string dsc = Path.Combine(appData, "discord");
-                            if (Directory.Exists(dsc)) {
-                                size += GetDirectorySizeMB(Path.Combine(dsc, "Cache"));
-                                size += GetDirectorySizeMB(Path.Combine(dsc, "Code Cache"));
-                                size += GetDirectorySizeMB(Path.Combine(dsc, "GPUCache"));
-                            } else {
-                                installed = false;
-                            }
-                        }
-                    } catch { }
+                        } catch { }
 
-                    cat.SizeMB = size;
-                    cat.IsInstalled = installed;
+                        cat.SizeMB = size;
+                        cat.IsInstalled = installed;
 
+                        var capturedCat = cat;
+                        double capturedSize = size;
+                        bool capturedInstalled = installed;
+                        mainWindow.Dispatcher.Invoke(new Action(() => {
+                            if (!capturedInstalled) {
+                                capturedCat.BadgeRef.Text = "Not Detected";
+                                capturedCat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x47, 0x55, 0x69));
+                                capturedCat.CheckBoxRef.IsEnabled = false;
+                                capturedCat.CheckBoxRef.IsChecked = false;
+                            } else if (capturedSize > 1024) {
+                                capturedCat.BadgeRef.Text = string.Format("{0:F2} GB", capturedSize / 1024.0);
+                                capturedCat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x84, 0xFC));
+                            } else if (capturedSize > 0.05) {
+                                capturedCat.BadgeRef.Text = string.Format("{0:F1} MB", capturedSize);
+                                capturedCat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8));
+                            } else {
+                                capturedCat.BadgeRef.Text = "Clean";
+                                capturedCat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+                            }
+                        }));
+                    }
+                } finally {
                     mainWindow.Dispatcher.Invoke(new Action(() => {
-                        if (!installed) {
-                            cat.BadgeRef.Text = "Not Detected";
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x47, 0x55, 0x69));
-                            cat.CheckBoxRef.IsEnabled = false;
-                            cat.CheckBoxRef.IsChecked = false;
-                        } else if (size > 1024) {
-                            cat.BadgeRef.Text = string.Format("{0:F2} GB", size / 1024.0);
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x84, 0xFC));
-                        } else if (size > 0.05) {
-                            cat.BadgeRef.Text = string.Format("{0:F1} MB", size);
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8));
-                        } else {
-                            cat.BadgeRef.Text = "Clean";
-                            cat.BadgeRef.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
-                        }
+                        isScanning = false;
+                        btnRescan.IsEnabled = true;
+                        UpdateSelectedSize();
+                        Log("Scan completed.");
                     }));
                 }
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    isScanning = false;
-                    btnRescan.IsEnabled = true;
-                    UpdateSelectedSize();
-                    Log("Scan completed.");
-                }));
             }));
         }
 
@@ -232,11 +237,13 @@ namespace OmniClean {
 
             bool isDryRun = (chkDryRun.IsChecked == true);
 
-            // Explicit confirmation with an impact summary before anything is deleted.
+            // Snapshot selected category IDs and sizes on the UI thread before starting the background task
+            var selectedIds = new HashSet<string>();
             int selectedCount = 0;
             double selectedMB = 0;
             foreach (var c in categories) {
                 if (c.CheckBoxRef.IsChecked == true && c.IsInstalled) {
+                    selectedIds.Add(c.Id);
                     selectedCount++;
                     selectedMB += c.SizeMB;
                 }
@@ -262,130 +269,136 @@ namespace OmniClean {
             Log(isDryRun ? "Starting Safe Dry Run simulation (Preview Mode)..." : "Starting clean on selected targets...");
 
             Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                try {
+                    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    string progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                    string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-                foreach (var cat in categories) {
-                    if (cat.CheckBoxRef.IsChecked != true || !cat.IsInstalled) continue;
+                    foreach (var cat in categories) {
+                        // Check against the thread-safe set captured on UI thread; NEVER touch CheckBoxRef here!
+                        if (!selectedIds.Contains(cat.Id)) continue;
 
-                    Log((isDryRun ? "[Simulate] " : "[Purging] ") + cat.Name);
+                        Log((isDryRun ? "[Simulate] " : "[Purging] ") + cat.Name);
 
-                    try {
-                        if (cat.Id == "recycle_bin") {
-                            if (!isDryRun) {
-                                SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
-                                rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
-                                string root = selectedDriveLetter + @":\";
-                                long preCount = 0;
-                                double preMB = 0;
-                                if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
-                                    preCount = rbInfo.i64NumItems;
-                                    preMB = rbInfo.i64Size / (1024.0 * 1024.0);
-                                }
-                                uint rbResult = SHEmptyRecycleBin(IntPtr.Zero, root, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-                                if (rbResult == 0) {
-                                    cleanDeletedCount += Math.Max(1, preCount);
-                                    cleanFreedMB += preMB;
-                                    Manifest(string.Format("[RECYCLE-BIN] Emptied {0} items, freed {1:F2} MB", preCount, preMB));
+                        try {
+                            if (cat.Id == "recycle_bin") {
+                                if (!isDryRun) {
+                                    SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
+                                    rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
+                                    string root = selectedDriveLetter + @":\";
+                                    long preCount = 0;
+                                    double preMB = 0;
+                                    if (SHQueryRecycleBin(root, ref rbInfo) == 0) {
+                                        preCount = rbInfo.i64NumItems;
+                                        preMB = rbInfo.i64Size / (1024.0 * 1024.0);
+                                    }
+                                    uint rbResult = SHEmptyRecycleBin(IntPtr.Zero, root, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+                                    if (rbResult == 0) {
+                                        cleanDeletedCount += Math.Max(1, preCount);
+                                        cleanFreedMB += preMB;
+                                        Manifest(string.Format("[RECYCLE-BIN] Emptied {0} items, freed {1:F2} MB", preCount, preMB));
+                                    } else {
+                                        Manifest("[RECYCLE-BIN] SHEmptyRecycleBin returned 0x" + rbResult.ToString("X") + " (locked or partial)");
+                                    }
                                 } else {
-                                    Manifest("[RECYCLE-BIN] SHEmptyRecycleBin returned 0x" + rbResult.ToString("X") + " (locked or partial)");
+                                    Manifest("[PREVIEW] Recycle Bin on drive " + selectedDriveLetter + ":");
                                 }
-                            } else {
-                                Manifest("[PREVIEW] Recycle Bin on drive " + selectedDriveLetter + ":");
-                            }
-                        } else if (cat.Id == "temp_files") {
-                            CleanFolder(Path.GetTempPath(), isDryRun);
-                            CleanFolder(Path.Combine(winDir, "Temp"), isDryRun);
-                        } else if (cat.Id == "browser_cache") {
-                            CleanBrowserCaches(isDryRun);
-                        } else if (cat.Id == "win_update") {
-                            CleanFolder(Path.Combine(winDir, @"SoftwareDistribution\Download"), isDryRun);
-                        } else if (cat.Id == "crash_dumps") {
-                            CleanFolder(Path.Combine(localApp, "CrashDumps"), isDryRun);
-                            CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"), isDryRun);
-                            CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"), isDryRun);
-                        } else if (cat.Id == "empty_folders") {
-                            CleanEmptyDirectories(Path.GetTempPath(), isDryRun);
-                        } else if (cat.Id == "nvidia_artifacts") {
-                            CleanFolder(Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts"), isDryRun);
-                        } else if (cat.Id == "capcut_old") {
-                            string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                            if (Directory.Exists(capApps)) {
-                                var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                if (dirs.Count > 1) {
-                                    dirs.Sort();
-                                    string latest = dirs[dirs.Count - 1];
-                                    foreach (var d in dirs) {
-                                        if (d != latest) {
-                                            try {
-                                                if (!isDryRun) {
-                                                    CleanFolder(d, false);
-                                                    try { Directory.Delete(d, true); } catch { }
-                                                } else {
-                                                    Manifest("[PREVIEW] " + d + " (recursive)");
+                            } else if (cat.Id == "temp_files") {
+                                CleanFolder(Path.GetTempPath(), isDryRun);
+                                CleanFolder(Path.Combine(winDir, "Temp"), isDryRun);
+                            } else if (cat.Id == "browser_cache") {
+                                CleanBrowserCaches(isDryRun);
+                            } else if (cat.Id == "win_update") {
+                                CleanFolder(Path.Combine(winDir, @"SoftwareDistribution\Download"), isDryRun);
+                            } else if (cat.Id == "crash_dumps") {
+                                CleanFolder(Path.Combine(localApp, "CrashDumps"), isDryRun);
+                                CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"), isDryRun);
+                                CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"), isDryRun);
+                            } else if (cat.Id == "empty_folders") {
+                                CleanEmptyDirectories(Path.GetTempPath(), isDryRun);
+                            } else if (cat.Id == "nvidia_artifacts") {
+                                CleanFolder(Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts"), isDryRun);
+                            } else if (cat.Id == "capcut_old") {
+                                string capApps = Path.Combine(localApp, @"CapCut\Apps");
+                                if (Directory.Exists(capApps)) {
+                                    var dirs = new List<string>(Directory.GetDirectories(capApps));
+                                    if (dirs.Count > 1) {
+                                        dirs.Sort();
+                                        string latest = dirs[dirs.Count - 1];
+                                        foreach (var d in dirs) {
+                                            if (d != latest) {
+                                                try {
+                                                    if (!isDryRun) {
+                                                        CleanFolder(d, false);
+                                                        try { Directory.Delete(d, true); } catch { }
+                                                    } else {
+                                                        Manifest("[PREVIEW] " + d + " (recursive)");
+                                                    }
+                                                } catch (Exception ex) {
+                                                    cleanFailedCount++;
+                                                    Manifest("[FAILED]  " + d + " -- " + ex.Message);
                                                 }
-                                            } catch (Exception ex) {
-                                                cleanFailedCount++;
-                                                Manifest("[FAILED]  " + d + " -- " + ex.Message);
                                             }
                                         }
                                     }
                                 }
+                            } else if (cat.Id == "vscode_cache") {
+                                string vscPath = Path.Combine(appData, "Code");
+                                CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), isDryRun);
+                                CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), isDryRun);
+                                CleanFolder(Path.Combine(vscPath, "CachedData"), isDryRun);
+                                CleanFolder(Path.Combine(vscPath, "Cache"), isDryRun);
+                                CleanFolder(Path.Combine(vscPath, "Code Cache"), isDryRun);
+                                CleanFolder(Path.Combine(vscPath, "GPUCache"), isDryRun);
+                            } else if (cat.Id == "dev_cache") {
+                                CleanFolder(Path.Combine(localApp, "npm-cache"), isDryRun);
+                                CleanFolder(Path.Combine(localApp, @"pip\cache"), isDryRun);
+                            } else if (cat.Id == "discord_cache") {
+                                string dsc = Path.Combine(appData, "discord");
+                                CleanFolder(Path.Combine(dsc, "Cache"), isDryRun);
+                                CleanFolder(Path.Combine(dsc, "Code Cache"), isDryRun);
+                                CleanFolder(Path.Combine(dsc, "GPUCache"), isDryRun);
                             }
-                        } else if (cat.Id == "vscode_cache") {
-                            string vscPath = Path.Combine(appData, "Code");
-                            CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, "CachedData"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, "Cache"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, "Code Cache"), isDryRun);
-                            CleanFolder(Path.Combine(vscPath, "GPUCache"), isDryRun);
-                        } else if (cat.Id == "dev_cache") {
-                            CleanFolder(Path.Combine(localApp, "npm-cache"), isDryRun);
-                            CleanFolder(Path.Combine(localApp, @"pip\cache"), isDryRun);
-                        } else if (cat.Id == "discord_cache") {
-                            string dsc = Path.Combine(appData, "discord");
-                            CleanFolder(Path.Combine(dsc, "Cache"), isDryRun);
-                            CleanFolder(Path.Combine(dsc, "Code Cache"), isDryRun);
-                            CleanFolder(Path.Combine(dsc, "GPUCache"), isDryRun);
+                        } catch (Exception ex) {
+                            Log("Warning: " + ex.Message);
                         }
-                    } catch (Exception ex) {
-                        Log("Warning: " + ex.Message);
                     }
+                } catch (Exception ex) {
+                    Log("Cleanup error: " + ex.Message);
+                    Manifest("[FATAL] " + ex.ToString());
+                } finally {
+                    mainWindow.Dispatcher.Invoke(new Action(() => {
+                        isCleaning = false;
+                        btnClean.Content = "⚡ Clean Selected Storage";
+                        btnClean.IsEnabled = true;
+                        UpdateDiskMetrics();
+
+                        string freedStr = cleanFreedMB > 1024 ? string.Format("{0:F2} GB", cleanFreedMB / 1024.0) : string.Format("{0:F1} MB", cleanFreedMB);
+                        string summary = string.Format("{0} items removed, ~{1} freed, {2} failures", cleanDeletedCount, freedStr, cleanFailedCount);
+                        EndCleanManifest(isDryRun ? "Preview finished - nothing was deleted." : "Summary: " + summary);
+
+                        if (isDryRun) {
+                            Log("Simulation finished. No files were modified (Dry Run active).");
+                        } else {
+                            Log("Cleanup finished: " + summary + ".");
+                            Log("Deletion manifest: " + lastCleanLogPath);
+                            if (cleanFailedCount > 0) {
+                                if (!IsAdministrator()) {
+                                    Log("Note: Some files could not be removed (in use by running apps, or system folders requiring Administrator privileges).");
+                                } else {
+                                    Log("Some items could not be removed (files currently locked by running applications) - see manifest for details.");
+                                }
+                            }
+                        }
+                        bannerSuccess.Visibility = Visibility.Visible;
+                        txtSuccessMsg.Text = isDryRun
+                            ? "Simulation complete (Dry Run): 0 files deleted. Uncheck 'Dry Run' to delete files."
+                            : string.Format("Cleanup complete - {0} removed, {1} freed.", cleanDeletedCount, freedStr);
+                        RunScanAsync();
+                    }));
                 }
-
-                mainWindow.Dispatcher.Invoke(new Action(() => {
-                    isCleaning = false;
-                    btnClean.Content = "⚡ Clean Selected Storage";
-                    btnClean.IsEnabled = true;
-                    UpdateDiskMetrics();
-
-                    string freedStr = cleanFreedMB > 1024 ? string.Format("{0:F2} GB", cleanFreedMB / 1024.0) : string.Format("{0:F1} MB", cleanFreedMB);
-                    string summary = string.Format("{0} items removed, ~{1} freed, {2} failures", cleanDeletedCount, freedStr, cleanFailedCount);
-                    EndCleanManifest(isDryRun ? "Preview finished - nothing was deleted." : "Summary: " + summary);
-
-                    if (isDryRun) {
-                        Log("Simulation finished. No files were modified (Dry Run active).");
-                    } else {
-                        Log("Cleanup finished: " + summary + ".");
-                        Log("Deletion manifest: " + lastCleanLogPath);
-                        if (cleanFailedCount > 0) {
-                            if (!IsAdministrator()) {
-                                Log("Note: Some files could not be removed (in use by running apps, or system folders requiring Administrator privileges).");
-                            } else {
-                                Log("Some items could not be removed (files currently locked by running applications) - see manifest for details.");
-                            }
-                        }
-                    }
-                    bannerSuccess.Visibility = Visibility.Visible;
-                    txtSuccessMsg.Text = isDryRun
-                        ? "Simulation complete (Dry Run): 0 files deleted. Uncheck 'Dry Run' to delete files."
-                        : string.Format("Cleanup complete - {0} removed, {1} freed.", cleanDeletedCount, freedStr);
-                    RunScanAsync();
-                }));
             }));
         }
 
