@@ -410,6 +410,103 @@ namespace OmniClean {
             </Setter>
         </Style>
 
+        <!-- Dark ComboBox Theme -->
+        <Style TargetType='ComboBoxItem'>
+            <Setter Property='Background' Value='Transparent'/>
+            <Setter Property='Foreground' Value='#E2E8F0'/>
+            <Setter Property='FontSize' Value='12'/>
+            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='Padding' Value='10,6'/>
+            <Setter Property='Cursor' Value='Hand'/>
+            <Setter Property='Template'>
+                <Setter.Value>
+                    <ControlTemplate TargetType='ComboBoxItem'>
+                        <Border Name='itemBdr' Background='{TemplateBinding Background}' Padding='{TemplateBinding Padding}' Margin='2' CornerRadius='5'>
+                            <ContentPresenter VerticalAlignment='Center'/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property='IsMouseOver' Value='True'>
+                                <Setter TargetName='itemBdr' Property='Background' Value='#223150'/>
+                                <Setter Property='Foreground' Value='#FFFFFF'/>
+                            </Trigger>
+                            <Trigger Property='IsSelected' Value='True'>
+                                <Setter TargetName='itemBdr' Property='Background' Value='#3B4D7A'/>
+                                <Setter Property='Foreground' Value='#FFFFFF'/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ControlTemplate x:Key='DarkComboBoxTemplate' TargetType='ComboBox'>
+            <Grid Name='MainGrid'>
+                <ToggleButton Name='ToggleButton'
+                              Focusable='False'
+                              IsChecked='{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}'
+                              ClickMode='Press'>
+                    <ToggleButton.Template>
+                        <ControlTemplate TargetType='ToggleButton'>
+                            <Border Name='Border' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6' Padding='4,2'>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width='*'/>
+                                        <ColumnDefinition Width='Auto'/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Name='Arrow' Grid.Column='1' Margin='4,0,2,0' HorizontalAlignment='Center' VerticalAlignment='Center'
+                                          Data='M 0 0 L 3.5 3.5 L 7 0 Z' Fill='#94A3B8'/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property='IsMouseOver' Value='True'>
+                                    <Setter TargetName='Arrow' Property='Fill' Value='#CBD5E1'/>
+                                </Trigger>
+                                <Trigger Property='IsChecked' Value='True'>
+                                    <Setter TargetName='Arrow' Property='Fill' Value='#818CF8'/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter Name='ContentSite'
+                                  IsHitTestVisible='False'
+                                  Content='{TemplateBinding SelectionBoxItem}'
+                                  ContentTemplate='{TemplateBinding SelectionBoxItemTemplate}'
+                                  ContentTemplateSelector='{TemplateBinding ItemTemplateSelector}'
+                                  Margin='6,0,18,0'
+                                  VerticalAlignment='Center'
+                                  HorizontalAlignment='Left'/>
+                <Popup Name='Popup'
+                       Placement='Bottom'
+                       IsOpen='{TemplateBinding IsDropDownOpen}'
+                       AllowsTransparency='True'
+                       Focusable='False'
+                       PopupAnimation='Slide'>
+                    <Grid Name='DropDown'
+                          SnapsToDevicePixels='True'
+                          MinWidth='{TemplateBinding ActualWidth}'
+                          MaxHeight='{TemplateBinding MaxDropDownHeight}'
+                          Margin='0,4,0,0'>
+                        <Border Name='DropDownBorder' Background='#0E1626' BorderBrush='#2A3B5E' BorderThickness='1' CornerRadius='8' Padding='4'>
+                            <ScrollViewer SnapsToDevicePixels='True'>
+                                <StackPanel IsItemsHost='True' KeyboardNavigation.DirectionalNavigation='Contained'/>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                </Popup>
+            </Grid>
+        </ControlTemplate>
+
+        <Style TargetType='ComboBox'>
+            <Setter Property='Foreground' Value='#F8FAFC'/>
+            <Setter Property='Background' Value='Transparent'/>
+            <Setter Property='BorderThickness' Value='0'/>
+            <Setter Property='FontSize' Value='12'/>
+            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='Cursor' Value='Hand'/>
+            <Setter Property='Template' Value='{StaticResource DarkComboBoxTemplate}'/>
+        </Style>
+
         <!-- Sidebar Navigation Button Style -->
         <Style x:Key='SidebarNavBtn' TargetType='Button'>
             <Setter Property='Background' Value='Transparent'/>
