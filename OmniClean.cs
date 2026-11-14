@@ -22,8 +22,8 @@ using Microsoft.Win32;
 [assembly: AssemblyProduct("OmniClean Universal Windows Performance & Storage Suite")]
 [assembly: AssemblyCompany("Junaed Khandakar")]
 [assembly: AssemblyCopyright("Copyright 2026 Junaed Khandakar")]
-[assembly: AssemblyVersion("1.0.4.0")]
-[assembly: AssemblyFileVersion("1.0.4.0")]
+[assembly: AssemblyVersion("1.0.5.0")]
+[assembly: AssemblyFileVersion("1.0.5.0")]
 
 namespace OmniClean {
     public class CategoryItem {
@@ -65,7 +65,7 @@ namespace OmniClean {
     }
 
     partial class Program {
-        const string CURRENT_VERSION = "v1.0.4";
+        const string CURRENT_VERSION = "v1.0.5";
         const string REPO_URL = "https://github.com/Junaed93/OmniClean";
         const string RELEASES_API = "https://api.github.com/repos/Junaed93/OmniClean/releases/latest";
         const string TASK_NAME = "OmniCleanUniversalAutoClean";
@@ -643,7 +643,7 @@ namespace OmniClean {
                         </Border>
                         <TextBlock Text='OmniClean' FontSize='12' FontWeight='SemiBold' Foreground='#FFFFFF' VerticalAlignment='Center'/>
                         <Border Background='#2D2D2D' BorderBrush='#3D3D3D' BorderThickness='1' CornerRadius='4' Padding='6,1' Margin='8,0,0,0' VerticalAlignment='Center'>
-                            <TextBlock Text='v1.0.4' FontSize='10' Foreground='#60CDFF'/>
+                            <TextBlock Text='v1.0.5' FontSize='10' Foreground='#60CDFF'/>
                         </Border>
                     </StackPanel>
 
@@ -1051,7 +1051,7 @@ namespace OmniClean {
                                 <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='20' Margin='8,0,0,0'>
                                     <StackPanel>
                                         <TextBlock Text='System Specifications' FontSize='17' FontWeight='SemiBold' Foreground='White' Margin='0,0,0,6'/>
-                                        <TextBlock Text='OmniClean v1.0.4 Standalone Edition' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,14'/>
+                                        <TextBlock Text='OmniClean v1.0.5 Standalone Edition' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,14'/>
 
                                         <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#383838' BorderThickness='1' CornerRadius='6' Padding='14' Margin='0,0,0,16'>
                                             <StackPanel>
@@ -1283,7 +1283,7 @@ namespace OmniClean {
                 CheckForUpdatesAsync(false);
                 StartUptimeTimer();
 
-                Log("OmniClean v1.0.4 initialized.");
+                Log("OmniClean v1.0.5 initialized.");
                 Log(string.Format("Host OS: {0} ({1}-bit)", Environment.OSVersion, Environment.Is64BitOperatingSystem ? "64" : "32"));
                 Log("Select cleanable targets and click 'Clean Selected Storage'.");
 
