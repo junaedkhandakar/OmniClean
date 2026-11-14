@@ -83,9 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setScheduleText(enabled) {
-        scheduleVal.textContent = enabled ? 'Active (Every Sunday at 12:00 PM)' : 'Disabled';
-        scheduleVal.style.color = enabled ? '#34d399' : '#94a3b8';
-    }
+            scheduleVal.textContent = enabled ? 'Active (Every Sunday at 12:00 PM)' : 'Disabled';
+            scheduleVal.style.color = enabled ? '#6ccb5f' : '#8a8a8a';
+        }
 
     function cleanHardwareText(s) {
         return (s || '')
@@ -108,23 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- gauge ----
-
     function updateGauge(percent, freeGB, totalGB) {
         gaugePercent.textContent = `${percent}%`;
         gaugeRatio.textContent = `${freeGB} GB / ${totalGB} GB`;
 
         const offset = RING_CIRCUMFERENCE - (RING_CIRCUMFERENCE * (percent / 100));
         ringFill.style.strokeDashoffset = offset;
+        ringFill.style.filter = 'none';
 
         if (percent < 15) {
-            ringFill.style.stroke = '#f43f5e'; // red
-            ringFill.style.filter = 'drop-shadow(0 0 12px rgba(244, 63, 94, 0.5))';
+            ringFill.style.stroke = '#ff99a4'; // Win11 Critical
         } else if (percent < 25) {
-            ringFill.style.stroke = '#f59e0b'; // amber
-            ringFill.style.filter = 'drop-shadow(0 0 12px rgba(245, 158, 11, 0.5))';
+            ringFill.style.stroke = '#fce100'; // Win11 Caution
         } else {
-            ringFill.style.stroke = '#10b981'; // emerald
-            ringFill.style.filter = 'drop-shadow(0 0 12px rgba(16, 185, 129, 0.5))';
+            ringFill.style.stroke = '#60cdff'; // Win11 Accent Cyan
         }
     }
 

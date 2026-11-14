@@ -1,30 +1,41 @@
 :root {
-    --bg-main: #090d16;
-    --bg-card: rgba(18, 24, 43, 0.75);
-    --bg-card-hover: rgba(26, 34, 61, 0.85);
-    --border-card: rgba(255, 255, 255, 0.08);
-    --border-card-hover: rgba(120, 119, 198, 0.3);
-    
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    
-    --accent-primary: #6366f1;
-    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-    --accent-glow: rgba(99, 102, 241, 0.35);
-    
-    --color-emerald: #10b981;
-    --color-cyan: #06b6d4;
-    --color-indigo: #818cf8;
-    --color-rose: #f43f5e;
-    --color-amber: #f59e0b;
-    
-    --radius-lg: 20px;
-    --radius-md: 14px;
-    --radius-sm: 8px;
-    
-    --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    /* Windows 11 WinUI 3 Dark Theme Tokens */
+    --bg-mica: #202020;
+    --bg-layer: rgba(43, 43, 43, 0.75);
+    --bg-layer-alt: rgba(32, 32, 32, 0.6);
+    --bg-card: rgba(255, 255, 255, 0.051);
+    --bg-card-hover: rgba(255, 255, 255, 0.082);
+    --bg-card-selected: rgba(96, 205, 255, 0.10);
+    --bg-control: rgba(255, 255, 255, 0.0605);
+    --bg-control-hover: rgba(255, 255, 255, 0.09);
+
+    --stroke-card: rgba(255, 255, 255, 0.085);
+    --stroke-card-hover: rgba(255, 255, 255, 0.14);
+    --stroke-divider: rgba(255, 255, 255, 0.08);
+    --stroke-accent: rgba(96, 205, 255, 0.45);
+
+    --text-primary: #ffffff;
+    --text-secondary: #c5c5c5;
+    --text-tertiary: #8a8a8a;
+    --text-on-accent: #002030;
+
+    --accent-default: #60cdff;
+    --accent-secondary: #4cc2ff;
+    --accent-tertiary: #0078d4;
+
+    --status-success: #6ccb5f;
+    --status-caution: #fce100;
+    --status-critical: #ff99a4;
+
+    --radius-window: 12px;
+    --radius-card: 8px;
+    --radius-control: 4px;
+
+    --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.22);
+    --shadow-flyout: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+    --font-sans: 'Segoe UI Variable Display', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
 }
 
 * {
@@ -34,76 +45,47 @@
 }
 
 body {
-    background-color: var(--bg-main);
+    background-color: var(--bg-mica);
+    background-image:
+        radial-gradient(circle at 12% 8%, rgba(0, 120, 212, 0.10) 0%, transparent 45%),
+        radial-gradient(circle at 88% 92%, rgba(96, 205, 255, 0.06) 0%, transparent 45%);
     color: var(--text-primary);
     font-family: var(--font-sans);
     min-height: 100vh;
     overflow-x: hidden;
-    position: relative;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     padding: 24px;
+    -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient Backdrops */
+/* Hide legacy neon blobs for clean Win11 Mica surface */
 .ambient-glow {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(120px);
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.45;
-}
-
-.glow-1 {
-    width: 450px;
-    height: 450px;
-    top: -100px;
-    left: -100px;
-    background: radial-gradient(circle, #4f46e5 0%, transparent 70%);
-}
-
-.glow-2 {
-    width: 500px;
-    height: 500px;
-    bottom: -120px;
-    right: -120px;
-    background: radial-gradient(circle, #7c3aed 0%, transparent 70%);
-}
-
-.glow-3 {
-    width: 350px;
-    height: 350px;
-    top: 40%;
-    right: 25%;
-    background: radial-gradient(circle, #06b6d4 0%, transparent 70%);
-    opacity: 0.2;
+    display: none;
 }
 
 /* App Container */
 .app-container {
     width: 100%;
-    max-width: 1200px;
-    position: relative;
-    z-index: 1;
+    max-width: 1180px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
-/* Header */
+/* Header / Win11 Command Bar */
 .app-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
-    background: var(--bg-card);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    padding: 14px 20px;
+    background: var(--bg-layer);
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    border: 1px solid var(--stroke-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
 }
 
 .brand {
@@ -113,150 +95,151 @@ body {
 }
 
 .brand-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    background: var(--accent-gradient);
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #0078d4 0%, #60cdff 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    box-shadow: 0 4px 16px var(--accent-glow);
+    color: #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.brand-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .brand-text h1 {
-    font-size: 1.35rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
 }
 
 .badge-version {
     font-size: 0.72rem;
     font-weight: 600;
-    color: #a5b4fc;
-    background: rgba(99, 102, 241, 0.15);
+    color: var(--accent-default);
+    background: rgba(96, 205, 255, 0.12);
     padding: 2px 8px;
-    border-radius: 10px;
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: var(--radius-control);
+    border: 1px solid rgba(96, 205, 255, 0.25);
 }
 
 .system-pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 8px 16px;
-    border-radius: 30px;
-    font-size: 0.85rem;
+    background: var(--bg-layer-alt);
+    border: 1px solid var(--stroke-card);
+    padding: 6px 14px;
+    border-radius: var(--radius-control);
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }
 
 .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background-color: var(--color-emerald);
-    box-shadow: 0 0 10px var(--color-emerald);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.15); opacity: 1; }
-    100% { transform: scale(0.95); opacity: 0.8; }
+    background-color: var(--status-success);
 }
 
 .header-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
 
+/* Win11 Standard Push Button */
 .btn-ghost {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-control);
     color: var(--text-primary);
-    border: 1px solid var(--border-card);
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--stroke-card);
+    border-bottom-color: rgba(255, 255, 255, 0.14);
+    padding: 6px 14px;
+    border-radius: var(--radius-control);
     font-family: inherit;
-    font-size: 0.88rem;
-    font-weight: 500;
+    font-size: 0.85rem;
+    font-weight: 400;
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-.btn-ghost:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
+.btn-ghost:hover:not(:disabled) {
+    background: var(--bg-control-hover);
+    border-color: var(--stroke-card-hover);
+}
+
+.btn-ghost:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+}
+
+.btn-ghost:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* Dashboard Grid */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 20px;
+    grid-template-columns: 360px 1fr;
+    gap: 16px;
 }
 
-/* Glass Card */
+/* Win11 Settings Card */
 .glass-card {
-    background: var(--bg-card);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    transition: border-color 0.25s ease;
-}
-
-.glass-card:hover {
-    border-color: var(--border-card-hover);
+    background: var(--bg-layer);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid var(--stroke-card);
+    border-radius: var(--radius-card);
+    padding: 20px;
+    box-shadow: var(--shadow-card);
 }
 
 /* Left Panel */
 .panel-left {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
 .card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
 }
 
 .card-header h2 {
-    font-size: 1.15rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .pill-drive {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    text-transform: uppercase;
-    background: rgba(6, 182, 212, 0.15);
-    color: var(--color-cyan);
-    padding: 4px 10px;
-    border-radius: 20px;
-    border: 1px solid rgba(6, 182, 212, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    padding: 3px 8px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--stroke-card);
 }
 
 /* Circular Gauge */
 .gauge-container {
     position: relative;
-    width: 220px;
-    height: 220px;
-    margin: 0 auto 20px auto;
+    width: 210px;
+    height: 210px;
+    margin: 0 auto 18px auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -268,20 +251,18 @@ body {
 
 .ring-track {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.06);
-    stroke-width: 14;
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 12;
 }
 
 .ring-fill {
     fill: none;
-    stroke: url(#gauge-gradient);
-    stroke: #10b981;
-    stroke-width: 14;
+    stroke: var(--accent-default);
+    stroke-width: 12;
     stroke-linecap: round;
     stroke-dasharray: 578;
     stroke-dashoffset: 578;
-    transition: stroke-dashoffset 1.2s cubic-bezier(0.2, 0.8, 0.2, 1), stroke 0.4s ease;
-    filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));
+    transition: stroke-dashoffset 0.9s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease;
 }
 
 .gauge-center {
@@ -293,22 +274,21 @@ body {
 }
 
 .gauge-percent {
-    font-size: 2.8rem;
-    font-weight: 800;
-    letter-spacing: -0.04em;
+    font-size: 2.4rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
     color: var(--text-primary);
 }
 
 .gauge-label {
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 0.8rem;
+    font-weight: 400;
     color: var(--text-secondary);
-    margin-top: -2px;
 }
 
 .gauge-sub {
-    font-size: 0.78rem;
-    color: var(--text-muted);
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
     margin-top: 4px;
 }
@@ -317,59 +297,59 @@ body {
 .stat-pills-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
 }
 
 .stat-pill {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--bg-layer-alt);
+    border: 1px solid var(--stroke-card);
     padding: 10px 8px;
-    border-radius: var(--radius-sm);
-    text-align: center;
+    border-radius: var(--radius-control);
+    text-align: left;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
 }
 
 .stat-pill-label {
-    font-size: 0.75rem;
-    color: var(--text-muted);
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
 }
 
 .stat-pill-val {
-    font-size: 0.92rem;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 600;
     font-family: var(--font-mono);
 }
 
-.text-emerald { color: var(--color-emerald); }
-.text-indigo { color: var(--color-indigo); }
-.text-cyan { color: var(--color-cyan); }
+.text-emerald { color: var(--status-success); }
+.text-indigo { color: var(--accent-default); }
+.text-cyan { color: var(--text-primary); }
 
-/* Automation Card */
+/* Automation Expander Card */
 .automation-card {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
 }
 
 .automation-header {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
 }
 
 .icon-wrap-glow {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: rgba(96, 205, 255, 0.1);
+    border: 1px solid rgba(96, 205, 255, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #c084fc;
+    color: var(--accent-default);
 }
 
 .automation-title {
@@ -377,31 +357,32 @@ body {
 }
 
 .automation-title h3 {
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .automation-title p {
-    font-size: 0.78rem;
-    color: var(--text-muted);
+    font-size: 0.76rem;
+    color: var(--text-secondary);
     margin-top: 2px;
 }
 
 .automation-status {
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--bg-layer-alt);
+    border: 1px solid var(--stroke-card);
     padding: 8px 12px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
 }
 
-/* Switch */
+/* Windows 11 ToggleSwitch */
 .switch {
     position: relative;
     display: inline-block;
-    width: 48px;
-    height: 26px;
+    width: 40px;
+    height: 20px;
 }
 
 .switch input {
@@ -414,89 +395,91 @@ body {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: rgba(255, 255, 255, 0.15);
-    transition: .3s;
-    border-radius: 34px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    transition: all 0.15s ease;
+    border-radius: 20px;
 }
 
 .slider:before {
     position: absolute;
     content: "";
-    height: 18px;
-    width: 18px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    transition: .3s;
+    height: 12px;
+    width: 12px;
+    left: 3px;
+    bottom: 3px;
+    background-color: rgba(255, 255, 255, 0.78);
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease;
     border-radius: 50%;
 }
 
 input:checked + .slider {
-    background: var(--accent-gradient);
-    box-shadow: 0 0 12px var(--accent-glow);
+    background: var(--accent-default);
+    border-color: var(--accent-default);
 }
 
 input:checked + .slider:before {
-    transform: translateX(22px);
+    transform: translateX(20px);
+    background-color: var(--text-on-accent);
 }
 
 /* Right Panel */
 .panel-right {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
 .categories-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
 }
 
 .categories-header h2 {
-    font-size: 1.25rem;
+    font-size: 1.05rem;
     font-weight: 600;
 }
 
 .categories-header .subtitle {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
 }
 
 .quick-selection {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .btn-subtle {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-secondary);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 6px 12px;
-    border-radius: var(--radius-sm);
+    background: var(--bg-control);
+    color: var(--text-primary);
+    border: 1px solid var(--stroke-card);
+    padding: 5px 12px;
+    border-radius: var(--radius-control);
     font-family: inherit;
     font-size: 0.78rem;
-    font-weight: 500;
+    font-weight: 400;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.12s ease;
 }
 
 .btn-subtle:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
+    background: var(--bg-control-hover);
+    border-color: var(--stroke-card-hover);
 }
 
-/* Category List */
+/* Category List (Win11 Settings Expander Rows) */
 .category-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 380px;
+    gap: 4px;
+    max-height: 390px;
     overflow-y: auto;
-    padding-right: 6px;
-    margin-bottom: 20px;
+    padding-right: 4px;
+    margin-bottom: 16px;
 }
 
 .category-list::-webkit-scrollbar {
@@ -504,12 +487,16 @@ input:checked + .slider:before {
 }
 
 .category-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
 }
 
 .category-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 3px;
+}
+
+.category-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 /* Category Item */
@@ -518,23 +505,22 @@ input:checked + .slider:before {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--stroke-card);
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.12s ease, border-color 0.12s ease;
     user-select: none;
 }
 
 .category-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-    transform: translateX(2px);
+    background: var(--bg-card-hover);
+    border-color: var(--stroke-card-hover);
 }
 
 .category-item.selected {
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.35);
+    background: var(--bg-card-selected);
+    border-color: var(--stroke-accent);
 }
 
 .item-left {
@@ -543,26 +529,29 @@ input:checked + .slider:before {
     gap: 14px;
 }
 
+/* Win11 CheckBox */
 .custom-checkbox {
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
-    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.54);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
-    background: rgba(0, 0, 0, 0.2);
+    transition: all 0.12s ease;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text-on-accent);
+    flex-shrink: 0;
 }
 
 .category-item.selected .custom-checkbox {
-    background: var(--accent-gradient);
-    border-color: transparent;
+    background: var(--accent-default);
+    border-color: var(--accent-default);
 }
 
 .custom-checkbox svg {
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: opacity 0.12s ease;
 }
 
 .category-item.selected .custom-checkbox svg {
@@ -570,14 +559,14 @@ input:checked + .slider:before {
 }
 
 .item-details h4 {
-    font-size: 0.92rem;
-    font-weight: 600;
+    font-size: 0.88rem;
+    font-weight: 500;
     color: var(--text-primary);
 }
 
 .item-details p {
-    font-size: 0.78rem;
-    color: var(--text-muted);
+    font-size: 0.76rem;
+    color: var(--text-secondary);
     margin-top: 2px;
 }
 
@@ -589,23 +578,25 @@ input:checked + .slider:before {
 
 .size-badge {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
+    padding: 3px 10px;
+    border-radius: var(--radius-control);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--text-secondary);
+    border: 1px solid var(--stroke-card);
 }
 
 .size-badge.has-data {
-    background: rgba(245, 158, 11, 0.15);
-    color: var(--color-amber);
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: rgba(252, 225, 0, 0.10);
+    color: var(--status-caution);
+    border-color: rgba(252, 225, 0, 0.28);
 }
 
 .size-badge.clean {
-    background: rgba(16, 185, 129, 0.12);
-    color: var(--color-emerald);
+    background: rgba(108, 203, 95, 0.12);
+    color: var(--status-success);
+    border-color: rgba(108, 203, 95, 0.25);
 }
 
 /* Action Summary Bar */
@@ -614,7 +605,7 @@ input:checked + .slider:before {
     align-items: center;
     justify-content: space-between;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--stroke-divider);
 }
 
 .summary-info {
@@ -624,158 +615,161 @@ input:checked + .slider:before {
 }
 
 .summary-label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    font-size: 0.76rem;
+    color: var(--text-secondary);
 }
 
 .summary-size {
-    font-size: 1.35rem;
-    font-weight: 700;
+    font-size: 1.25rem;
+    font-weight: 600;
     font-family: var(--font-mono);
     color: var(--text-primary);
 }
 
+/* Win11 Accent Button */
 .btn-primary {
-    background: var(--accent-gradient);
-    color: white;
-    border: none;
-    padding: 12px 28px;
-    border-radius: var(--radius-md);
+    background: var(--accent-default);
+    color: var(--text-on-accent);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-bottom-color: rgba(0, 0, 0, 0.25);
+    padding: 9px 20px;
+    border-radius: var(--radius-control);
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 20px var(--accent-glow);
-    transition: all 0.25s ease;
+    transition: background 0.12s ease, opacity 0.12s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 28px rgba(99, 102, 241, 0.5);
-    filter: brightness(1.1);
+    background: var(--accent-secondary);
 }
 
 .btn-primary:active:not(:disabled) {
-    transform: translateY(0);
+    background: #38b0e8;
 }
 
 .btn-primary:disabled {
-    opacity: 0.5;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.36);
+    border-color: transparent;
     cursor: not-allowed;
-    box-shadow: none;
 }
 
-/* Console Log Card */
+/* Console Log Card (Windows Terminal Aesthetic) */
 .console-card {
-    padding: 18px 24px;
+    padding: 16px 20px;
 }
 
 .console-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .console-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .console-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--color-cyan);
-    box-shadow: 0 0 8px var(--color-cyan);
+    background: var(--accent-default);
 }
 
 .btn-text {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 0.78rem;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: 3px 8px;
+    border-radius: var(--radius-control);
+    font-size: 0.76rem;
     cursor: pointer;
     font-family: inherit;
 }
 
 .btn-text:hover {
-    color: var(--text-secondary);
+    background: var(--bg-control);
+    color: var(--text-primary);
 }
 
 .console-output {
-    background: rgba(0, 0, 0, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-sm);
+    background: #141414;
+    border: 1px solid var(--stroke-card);
+    border-radius: 6px;
     padding: 12px 14px;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: #cbd5e1;
-    max-height: 140px;
+    font-size: 0.78rem;
+    color: #d4d4d4;
+    max-height: 145px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .log-line {
     word-break: break-all;
 }
 
-.log-system { color: #818cf8; }
-.log-success { color: #34d399; }
-.log-warn { color: #fbbf24; }
-.log-error { color: #f87171; }
+.log-system { color: var(--accent-default); }
+.log-success { color: var(--status-success); }
+.log-warn { color: var(--status-caution); }
+.log-error { color: var(--status-critical); }
 
-/* Spinner */
+/* Spinner (Win11 ProgressRing) */
 .loading-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 40px 0;
-    color: var(--text-muted);
-    font-size: 0.9rem;
+    gap: 10px;
+    padding: 36px 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
 }
 
 .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: var(--accent-primary);
+    width: 26px;
+    height: 26px;
+    border: 2.5px solid rgba(255, 255, 255, 0.12);
+    border-top-color: var(--accent-default);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.75s linear infinite;
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
-/* Toast */
+/* Win11 InfoBar / Flyout Toast */
 .toast {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    background: rgba(22, 27, 46, 0.95);
-    border: 1px solid rgba(99, 102, 241, 0.4);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    color: white;
-    padding: 12px 20px;
-    border-radius: var(--radius-md);
-    font-size: 0.88rem;
-    font-weight: 500;
+    background: #2c2c2c;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 4px solid var(--accent-default);
+    box-shadow: var(--shadow-flyout);
+    color: var(--text-primary);
+    padding: 12px 18px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 400;
     z-index: 999;
-    transform: translateY(100px);
+    transform: translateY(80px);
     opacity: 0;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    backdrop-filter: blur(16px);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast.show {
@@ -787,5 +781,9 @@ input:checked + .slider:before {
 @media (max-width: 900px) {
     .dashboard-grid {
         grid-template-columns: 1fr;
+    }
+    .app-header {
+        flex-wrap: wrap;
+        gap: 12px;
     }
 }

@@ -94,6 +94,8 @@ namespace OmniClean {
         const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
         const int DWM_WINDOW_CORNER_ROUND = 2;
+        const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+        const int DWMSBT_MAINWINDOW = 2; // Windows 11 Mica
 
         [DllImport("dwmapi.dll")]
         static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
@@ -233,7 +235,6 @@ namespace OmniClean {
 
         [STAThread]
         static void Main(string[] args) {
-            // Single-instance guard: prevents two scanners/cleaners racing on the same files.
             bool createdNew;
             singleInstanceMutex = new Mutex(true, @"Local\OmniClean_SingleInstance", out createdNew);
             if (!createdNew) {
@@ -257,69 +258,37 @@ namespace OmniClean {
                 string xaml = @"
 <Window xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
         xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
-        Title='OmniClean - Universal Windows Performance &amp; Storage Suite'
+        Title='OmniClean - Windows 11 Storage &amp; Performance Suite'
         Width='1220' Height='800'
         MinWidth='1060' MinHeight='720'
         WindowStartupLocation='CenterScreen'
         WindowStyle='None'
         AllowsTransparency='False'
-        Background='#0A0F1C'
-        Foreground='#F8FAFC'
-        FontFamily='Segoe UI'
+        Background='#202020'
+        Foreground='#FFFFFF'
+        FontFamily='Segoe UI Variable Text, Segoe UI'
         UseLayoutRounding='True'
         TextOptions.TextFormattingMode='Display'>
     <Window.Resources>
-        <!-- ============ v1.0.3 Visual Refresh: Shared Gradient Brushes ============ -->
-        <LinearGradientBrush x:Key='BrushWindowBg' StartPoint='0,0' EndPoint='1,1'>
-            <GradientStop Color='#0C1122' Offset='0'/>
-            <GradientStop Color='#070B15' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushTitleBar' StartPoint='0,0' EndPoint='0,1'>
-            <GradientStop Color='#0E1428' Offset='0'/>
-            <GradientStop Color='#0C1120' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushSidebar' StartPoint='0,0' EndPoint='0,1'>
-            <GradientStop Color='#0D1426' Offset='0'/>
-            <GradientStop Color='#0A0F1E' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushCard' StartPoint='0,0' EndPoint='0,1'>
-            <GradientStop Color='#131B31' Offset='0'/>
-            <GradientStop Color='#0F1626' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushInnerPanel' StartPoint='0,0' EndPoint='0,1'>
-            <GradientStop Color='#0C1220' Offset='0'/>
-            <GradientStop Color='#0A0F1C' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushHealthCard' StartPoint='0,0' EndPoint='1,1'>
-            <GradientStop Color='#111A31' Offset='0'/>
-            <GradientStop Color='#0D1424' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushAccent' StartPoint='0,0' EndPoint='1,1'>
-            <GradientStop Color='#6366F1' Offset='0'/>
-            <GradientStop Color='#8B5CF6' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushAccentHover' StartPoint='0,0' EndPoint='1,1'>
-            <GradientStop Color='#4F46E5' Offset='0'/>
-            <GradientStop Color='#7C3AED' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushTitleText' StartPoint='0,0' EndPoint='1,0'>
-            <GradientStop Color='#FFFFFF' Offset='0'/>
-            <GradientStop Color='#C7D2FE' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushProgressMint' StartPoint='0,0' EndPoint='1,0'>
-            <GradientStop Color='#10B981' Offset='0'/>
-            <GradientStop Color='#34D399' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushProgressSky' StartPoint='0,0' EndPoint='1,0'>
-            <GradientStop Color='#0EA5E9' Offset='0'/>
-            <GradientStop Color='#38BDF8' Offset='1'/>
-        </LinearGradientBrush>
-        <LinearGradientBrush x:Key='BrushBannerUpdate' StartPoint='0,0' EndPoint='1,0'>
-            <GradientStop Color='#1B1840' Offset='0'/>
-            <GradientStop Color='#251C4C' Offset='1'/>
-        </LinearGradientBrush>
+        <!-- ============ Windows 11 Fluent Design (WinUI 3 Dark) Brushes ============ -->
+        <SolidColorBrush x:Key='BrushWindowBg' Color='#202020'/>
+        <SolidColorBrush x:Key='BrushTitleBar' Color='#202020'/>
+        <SolidColorBrush x:Key='BrushSidebar' Color='#202020'/>
+        <SolidColorBrush x:Key='BrushWorkspace' Color='#272727'/>
+        <SolidColorBrush x:Key='BrushCard' Color='#2C2C2C'/>
+        <SolidColorBrush x:Key='BrushInnerPanel' Color='#1F1F1F'/>
+        <SolidColorBrush x:Key='BrushHealthCard' Color='#292929'/>
+        <SolidColorBrush x:Key='BrushCardBorder' Color='#3A3A3A'/>
+        <SolidColorBrush x:Key='BrushDivider' Color='#303030'/>
 
-        <!-- Dark scrollbar theme -->
+        <SolidColorBrush x:Key='BrushAccent' Color='#60CDFF'/>
+        <SolidColorBrush x:Key='BrushAccentHover' Color='#4CC2FF'/>
+        <SolidColorBrush x:Key='BrushTitleText' Color='#FFFFFF'/>
+        <SolidColorBrush x:Key='BrushProgressMint' Color='#60CDFF'/>
+        <SolidColorBrush x:Key='BrushProgressSky' Color='#60CDFF'/>
+        <SolidColorBrush x:Key='BrushBannerUpdate' Color='#2C2C2C'/>
+
+        <!-- Win11 Thin Scrollbar -->
         <ControlTemplate x:Key='VScrollBarTemplate' TargetType='ScrollBar'>
             <Grid Background='Transparent'>
                 <Track Name='PART_Track' IsDirectionReversed='True'>
@@ -330,7 +299,7 @@ namespace OmniClean {
                         <Thumb Name='thumb' Margin='2,0'>
                             <Thumb.Template>
                                 <ControlTemplate TargetType='Thumb'>
-                                    <Border Background='#334155' CornerRadius='4' Width='6'/>
+                                    <Border Background='#5A5A5A' CornerRadius='3' Width='4'/>
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
@@ -351,7 +320,7 @@ namespace OmniClean {
                         <Thumb Name='thumb' Margin='0,2'>
                             <Thumb.Template>
                                 <ControlTemplate TargetType='Thumb'>
-                                    <Border Background='#334155' CornerRadius='4' Height='6'/>
+                                    <Border Background='#5A5A5A' CornerRadius='3' Height='4'/>
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
@@ -363,12 +332,12 @@ namespace OmniClean {
             </Grid>
         </ControlTemplate>
         <Style TargetType='ScrollBar'>
-            <Setter Property='Width' Value='10'/>
+            <Setter Property='Width' Value='8'/>
             <Setter Property='Background' Value='Transparent'/>
             <Setter Property='Template' Value='{StaticResource VScrollBarTemplate}'/>
             <Style.Triggers>
                 <Trigger Property='Orientation' Value='Horizontal'>
-                    <Setter Property='Height' Value='10'/>
+                    <Setter Property='Height' Value='8'/>
                     <Setter Property='Width' Value='Auto'/>
                     <Setter Property='Template' Value='{StaticResource HScrollBarTemplate}'/>
                 </Trigger>
@@ -379,10 +348,12 @@ namespace OmniClean {
         </Style>
 
         <Style TargetType='Border'>
-            <Setter Property='CornerRadius' Value='12'/>
+            <Setter Property='CornerRadius' Value='8'/>
         </Style>
+
+        <!-- Win11 Fluent CheckBox -->
         <Style TargetType='CheckBox'>
-            <Setter Property='Foreground' Value='#F1F5F9'/>
+            <Setter Property='Foreground' Value='#FFFFFF'/>
             <Setter Property='FontSize' Value='13'/>
             <Setter Property='VerticalContentAlignment' Value='Center'/>
             <Setter Property='Cursor' Value='Hand'/>
@@ -390,19 +361,20 @@ namespace OmniClean {
                 <Setter.Value>
                     <ControlTemplate TargetType='CheckBox'>
                         <StackPanel Orientation='Horizontal' Background='Transparent'>
-                            <Border Name='box' Width='17' Height='17' CornerRadius='5' BorderBrush='#475569' BorderThickness='1.5' Background='Transparent' VerticalAlignment='Center'>
-                                <Path Name='glyph' Data='M 3.5 8.5 L 7 11.5 L 13 4.5' Stroke='White' StrokeThickness='2' StrokeStartLineCap='Round' StrokeEndLineCap='Round' Visibility='Collapsed'/>
+                            <Border Name='box' Width='18' Height='18' CornerRadius='4' BorderBrush='#8A8A8A' BorderThickness='1' Background='#1F1F1F' VerticalAlignment='Center'>
+                                <Path Name='glyph' Data='M 3.5 9 L 7 12.5 L 14 4.5' Stroke='#002030' StrokeThickness='2' StrokeStartLineCap='Round' StrokeEndLineCap='Round' Visibility='Collapsed'/>
                             </Border>
                             <ContentPresenter Margin='8,0,0,0' VerticalAlignment='Center'/>
                         </StackPanel>
                         <ControlTemplate.Triggers>
+                            <Trigger Property='IsMouseOver' Value='True'>
+                                <Setter TargetName='box' Property='Background' Value='#2B2B2B'/>
+                                <Setter TargetName='box' Property='BorderBrush' Value='#C5C5C5'/>
+                            </Trigger>
                             <Trigger Property='IsChecked' Value='True'>
                                 <Setter TargetName='box' Property='Background' Value='{StaticResource BrushAccent}'/>
                                 <Setter TargetName='box' Property='BorderBrush' Value='{StaticResource BrushAccent}'/>
                                 <Setter TargetName='glyph' Property='Visibility' Value='Visible'/>
-                            </Trigger>
-                            <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='box' Property='BorderBrush' Value='#94A3B8'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -410,28 +382,26 @@ namespace OmniClean {
             </Setter>
         </Style>
 
-        <!-- Dark ComboBox Theme -->
+        <!-- Win11 Dark ComboBox -->
         <Style TargetType='ComboBoxItem'>
             <Setter Property='Background' Value='Transparent'/>
-            <Setter Property='Foreground' Value='#E2E8F0'/>
+            <Setter Property='Foreground' Value='#FFFFFF'/>
             <Setter Property='FontSize' Value='12'/>
-            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='FontWeight' Value='Normal'/>
             <Setter Property='Padding' Value='10,6'/>
             <Setter Property='Cursor' Value='Hand'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='ComboBoxItem'>
-                        <Border Name='itemBdr' Background='{TemplateBinding Background}' Padding='{TemplateBinding Padding}' Margin='2' CornerRadius='5'>
+                        <Border Name='itemBdr' Background='{TemplateBinding Background}' Padding='{TemplateBinding Padding}' Margin='2' CornerRadius='4'>
                             <ContentPresenter VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='itemBdr' Property='Background' Value='#223150'/>
-                                <Setter Property='Foreground' Value='#FFFFFF'/>
+                                <Setter TargetName='itemBdr' Property='Background' Value='#383838'/>
                             </Trigger>
                             <Trigger Property='IsSelected' Value='True'>
-                                <Setter TargetName='itemBdr' Property='Background' Value='#3B4D7A'/>
-                                <Setter Property='Foreground' Value='#FFFFFF'/>
+                                <Setter TargetName='itemBdr' Property='Background' Value='#404040'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -447,22 +417,19 @@ namespace OmniClean {
                               ClickMode='Press'>
                     <ToggleButton.Template>
                         <ControlTemplate TargetType='ToggleButton'>
-                            <Border Name='Border' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6' Padding='4,2'>
+                            <Border Name='Border' Background='#323232' BorderBrush='#454545' BorderThickness='1' CornerRadius='4' Padding='6,3'>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='*'/>
                                         <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
                                     <Path Name='Arrow' Grid.Column='1' Margin='4,0,2,0' HorizontalAlignment='Center' VerticalAlignment='Center'
-                                          Data='M 0 0 L 3.5 3.5 L 7 0 Z' Fill='#94A3B8'/>
+                                          Data='M 0 0 L 4 4 L 8 0' Stroke='#C5C5C5' StrokeThickness='1.3'/>
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property='IsMouseOver' Value='True'>
-                                    <Setter TargetName='Arrow' Property='Fill' Value='#CBD5E1'/>
-                                </Trigger>
-                                <Trigger Property='IsChecked' Value='True'>
-                                    <Setter TargetName='Arrow' Property='Fill' Value='#818CF8'/>
+                                    <Setter TargetName='Border' Property='Background' Value='#3B3B3B'/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -473,7 +440,7 @@ namespace OmniClean {
                                   Content='{TemplateBinding SelectionBoxItem}'
                                   ContentTemplate='{TemplateBinding SelectionBoxItemTemplate}'
                                   ContentTemplateSelector='{TemplateBinding ItemTemplateSelector}'
-                                  Margin='6,0,18,0'
+                                  Margin='8,0,20,0'
                                   VerticalAlignment='Center'
                                   HorizontalAlignment='Left'/>
                 <Popup Name='Popup'
@@ -487,7 +454,7 @@ namespace OmniClean {
                           MinWidth='{TemplateBinding ActualWidth}'
                           MaxHeight='{TemplateBinding MaxDropDownHeight}'
                           Margin='0,4,0,0'>
-                        <Border Name='DropDownBorder' Background='#0E1626' BorderBrush='#2A3B5E' BorderThickness='1' CornerRadius='8' Padding='4'>
+                        <Border Name='DropDownBorder' Background='#2C2C2C' BorderBrush='#454545' BorderThickness='1' CornerRadius='6' Padding='4'>
                             <ScrollViewer SnapsToDevicePixels='True'>
                                 <StackPanel IsItemsHost='True' KeyboardNavigation.DirectionalNavigation='Contained'/>
                             </ScrollViewer>
@@ -498,35 +465,35 @@ namespace OmniClean {
         </ControlTemplate>
 
         <Style TargetType='ComboBox'>
-            <Setter Property='Foreground' Value='#F8FAFC'/>
+            <Setter Property='Foreground' Value='#FFFFFF'/>
             <Setter Property='Background' Value='Transparent'/>
             <Setter Property='BorderThickness' Value='0'/>
             <Setter Property='FontSize' Value='12'/>
-            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='FontWeight' Value='Normal'/>
             <Setter Property='Cursor' Value='Hand'/>
             <Setter Property='Template' Value='{StaticResource DarkComboBoxTemplate}'/>
         </Style>
 
-        <!-- Sidebar Navigation Button Style -->
+        <!-- Win11 NavigationView Item Style -->
         <Style x:Key='SidebarNavBtn' TargetType='Button'>
             <Setter Property='Background' Value='Transparent'/>
-            <Setter Property='Foreground' Value='#94A3B8'/>
+            <Setter Property='Foreground' Value='#C5C5C5'/>
             <Setter Property='FontSize' Value='13'/>
-            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='FontWeight' Value='Normal'/>
             <Setter Property='BorderThickness' Value='0'/>
             <Setter Property='Cursor' Value='Hand'/>
-            <Setter Property='Padding' Value='12,11'/>
-            <Setter Property='Margin' Value='0,0,0,5'/>
+            <Setter Property='Padding' Value='10,9'/>
+            <Setter Property='Margin' Value='0,0,0,3'/>
             <Setter Property='HorizontalContentAlignment' Value='Stretch'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='Button'>
-                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='9' Padding='{TemplateBinding Padding}'>
+                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='6' Padding='{TemplateBinding Padding}'>
                             <ContentPresenter VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='bdr' Property='Background' Value='#1A2440'/>
+                                <Setter TargetName='bdr' Property='Background' Value='#2D2D2D'/>
                                 <Setter Property='Foreground' Value='#FFFFFF'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -535,22 +502,20 @@ namespace OmniClean {
             </Setter>
         </Style>
 
-        <!-- Primary Action Button Style -->
+        <!-- Win11 Primary Accent Button -->
         <Style x:Key='PrimaryBtn' TargetType='Button'>
             <Setter Property='Background' Value='{StaticResource BrushAccent}'/>
-            <Setter Property='Foreground' Value='White'/>
+            <Setter Property='Foreground' Value='#002030'/>
             <Setter Property='FontSize' Value='13'/>
-            <Setter Property='FontWeight' Value='Bold'/>
-            <Setter Property='BorderThickness' Value='0'/>
+            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='BorderThickness' Value='1'/>
+            <Setter Property='BorderBrush' Value='#75D5FF'/>
             <Setter Property='Cursor' Value='Hand'/>
-            <Setter Property='Padding' Value='18,10'/>
+            <Setter Property='Padding' Value='16,8'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='Button'>
-                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='9' Padding='{TemplateBinding Padding}'>
-                            <Border.Effect>
-                                <DropShadowEffect Color='#4F46E5' BlurRadius='18' ShadowDepth='0' Opacity='0.45'/>
-                            </Border.Effect>
+                        <Border Name='bdr' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='4' Padding='{TemplateBinding Padding}'>
                             <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -558,7 +523,12 @@ namespace OmniClean {
                                 <Setter TargetName='bdr' Property='Background' Value='{StaticResource BrushAccentHover}'/>
                             </Trigger>
                             <Trigger Property='IsPressed' Value='True'>
-                                <Setter TargetName='bdr' Property='Background' Value='#4338CA'/>
+                                <Setter TargetName='bdr' Property='Background' Value='#38B0E8'/>
+                            </Trigger>
+                            <Trigger Property='IsEnabled' Value='False'>
+                                <Setter TargetName='bdr' Property='Background' Value='#333333'/>
+                                <Setter TargetName='bdr' Property='BorderBrush' Value='#3A3A3A'/>
+                                <Setter Property='Foreground' Value='#777777'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -566,27 +536,30 @@ namespace OmniClean {
             </Setter>
         </Style>
 
-        <!-- Secondary Button Style -->
+        <!-- Win11 Standard Secondary Button -->
         <Style x:Key='SecondaryBtn' TargetType='Button'>
-            <Setter Property='Background' Value='#162032'/>
-            <Setter Property='Foreground' Value='#CBD5E1'/>
+            <Setter Property='Background' Value='#323232'/>
+            <Setter Property='Foreground' Value='#FFFFFF'/>
             <Setter Property='FontSize' Value='12'/>
-            <Setter Property='FontWeight' Value='SemiBold'/>
+            <Setter Property='FontWeight' Value='Normal'/>
             <Setter Property='BorderThickness' Value='1'/>
-            <Setter Property='BorderBrush' Value='#222F48'/>
+            <Setter Property='BorderBrush' Value='#424242'/>
             <Setter Property='Cursor' Value='Hand'/>
             <Setter Property='Padding' Value='12,6'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='Button'>
-                        <Border Name='bdr' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='7' Padding='{TemplateBinding Padding}'>
+                        <Border Name='bdr' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='4' Padding='{TemplateBinding Padding}'>
                             <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='bdr' Property='Background' Value='#22314E'/>
-                                <Setter TargetName='bdr' Property='BorderBrush' Value='#3B82F6'/>
-                                <Setter Property='Foreground' Value='#FFFFFF'/>
+                                <Setter TargetName='bdr' Property='Background' Value='#3B3B3B'/>
+                                <Setter TargetName='bdr' Property='BorderBrush' Value='#505050'/>
+                            </Trigger>
+                            <Trigger Property='IsPressed' Value='True'>
+                                <Setter TargetName='bdr' Property='Background' Value='#292929'/>
+                                <Setter Property='Foreground' Value='#C5C5C5'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -594,23 +567,23 @@ namespace OmniClean {
             </Setter>
         </Style>
 
-        <!-- Window Control Button (Min/Max) -->
+        <!-- Native Win11 Caption Buttons (46x32) -->
         <Style x:Key='WinControlBtn' TargetType='Button'>
-            <Setter Property='Width' Value='36'/>
-            <Setter Property='Height' Value='30'/>
+            <Setter Property='Width' Value='46'/>
+            <Setter Property='Height' Value='32'/>
             <Setter Property='Background' Value='Transparent'/>
-            <Setter Property='Foreground' Value='#94A3B8'/>
+            <Setter Property='Foreground' Value='#C5C5C5'/>
             <Setter Property='BorderThickness' Value='0'/>
-            <Setter Property='Cursor' Value='Hand'/>
+            <Setter Property='Cursor' Value='Arrow'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='Button'>
-                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='6'>
+                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='0'>
                             <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='bdr' Property='Background' Value='#1E293B'/>
+                                <Setter TargetName='bdr' Property='Background' Value='#2E2E2E'/>
                                 <Setter Property='Foreground' Value='#FFFFFF'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -619,23 +592,23 @@ namespace OmniClean {
             </Setter>
         </Style>
 
-        <!-- Window Close Button -->
+        <!-- Native Win11 Close Button (#C42B1C on Hover) -->
         <Style x:Key='WinCloseBtn' TargetType='Button'>
-            <Setter Property='Width' Value='36'/>
-            <Setter Property='Height' Value='30'/>
+            <Setter Property='Width' Value='46'/>
+            <Setter Property='Height' Value='32'/>
             <Setter Property='Background' Value='Transparent'/>
-            <Setter Property='Foreground' Value='#94A3B8'/>
+            <Setter Property='Foreground' Value='#C5C5C5'/>
             <Setter Property='BorderThickness' Value='0'/>
-            <Setter Property='Cursor' Value='Hand'/>
+            <Setter Property='Cursor' Value='Arrow'/>
             <Setter Property='Template'>
                 <Setter.Value>
                     <ControlTemplate TargetType='Button'>
-                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='6'>
+                        <Border Name='bdr' Background='{TemplateBinding Background}' CornerRadius='0'>
                             <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property='IsMouseOver' Value='True'>
-                                <Setter TargetName='bdr' Property='Background' Value='#E11D48'/>
+                                <Setter TargetName='bdr' Property='Background' Value='#C42B1C'/>
                                 <Setter Property='Foreground' Value='#FFFFFF'/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -645,17 +618,17 @@ namespace OmniClean {
         </Style>
     </Window.Resources>
 
-    <!-- Outer Glassmorphic Frame -->
-    <Border Background='{StaticResource BrushWindowBg}' BorderBrush='#223050' BorderThickness='1' CornerRadius='8'>
+    <!-- Outer Win11 Mica Window Frame -->
+    <Border Background='{StaticResource BrushWindowBg}' BorderBrush='#333333' BorderThickness='1' CornerRadius='8'>
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height='46'/>
+                <RowDefinition Height='40'/>
                 <RowDefinition Height='Auto'/>
                 <RowDefinition Height='*'/>
             </Grid.RowDefinitions>
 
-            <!-- Top Titlebar / Header -->
-            <Border Grid.Row='0' Name='titleBar' Background='{StaticResource BrushTitleBar}' BorderBrush='#1E2943' BorderThickness='0,0,0,1' Padding='16,0' Cursor='SizeAll'>
+            <!-- Top Win11 Titlebar -->
+            <Border Grid.Row='0' Name='titleBar' Background='{StaticResource BrushTitleBar}' Padding='14,0,0,0'>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width='Auto'/>
@@ -663,59 +636,56 @@ namespace OmniClean {
                         <ColumnDefinition Width='Auto'/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Brand & Version -->
+                    <!-- App Icon & Title -->
                     <StackPanel Grid.Column='0' Orientation='Horizontal' VerticalAlignment='Center'>
-                        <Border Width='28' Height='28' Background='{StaticResource BrushAccent}' CornerRadius='8' Margin='0,0,10,0'>
-                            <Border.Effect>
-                                <DropShadowEffect Color='#6366F1' BlurRadius='10' ShadowDepth='0' Opacity='0.5'/>
-                            </Border.Effect>
-                            <TextBlock Text='⚡' FontSize='15' Foreground='White' HorizontalAlignment='Center' VerticalAlignment='Center'/>
+                        <Border Width='22' Height='22' Background='#0078D4' CornerRadius='5' Margin='0,0,10,0'>
+                            <TextBlock Text='⚡' FontSize='12' Foreground='White' HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
-                        <TextBlock Text='OmniClean' FontSize='15' FontWeight='Bold' Foreground='#FFFFFF' VerticalAlignment='Center'/>
-                        <Border Background='#241D57' BorderBrush='#818CF8' BorderThickness='1' CornerRadius='7' Padding='7,2' Margin='8,0,0,0' VerticalAlignment='Center'>
-                            <TextBlock Text='v1.0.4 PRO' FontSize='9' FontWeight='Bold' Foreground='#C7D2FE'/>
+                        <TextBlock Text='OmniClean' FontSize='12' FontWeight='SemiBold' Foreground='#FFFFFF' VerticalAlignment='Center'/>
+                        <Border Background='#2D2D2D' BorderBrush='#3D3D3D' BorderThickness='1' CornerRadius='4' Padding='6,1' Margin='8,0,0,0' VerticalAlignment='Center'>
+                            <TextBlock Text='v1.0.4' FontSize='10' Foreground='#60CDFF'/>
                         </Border>
                     </StackPanel>
 
-                    <!-- Center Uptime & Status Badge -->
+                    <!-- Center Uptime Pill -->
                     <StackPanel Grid.Column='1' Orientation='Horizontal' HorizontalAlignment='Center' VerticalAlignment='Center'>
-                        <Border Background='#111A2E' BorderBrush='#1E293B' BorderThickness='1' CornerRadius='14' Padding='12,4'>
+                        <Border Background='#292929' BorderBrush='#363636' BorderThickness='1' CornerRadius='4' Padding='10,3'>
                             <StackPanel Orientation='Horizontal'>
-                                <Ellipse Width='7' Height='7' Fill='#10B981' Margin='0,0,7,0' VerticalAlignment='Center'/>
-                                <TextBlock Name='txtHeaderUptimePill' Text='System Online' FontSize='11' Foreground='#94A3B8' VerticalAlignment='Center'/>
+                                <Ellipse Width='6' Height='6' Fill='#6CCB5F' Margin='0,0,7,0' VerticalAlignment='Center'/>
+                                <TextBlock Name='txtHeaderUptimePill' Text='System Online' FontSize='11' Foreground='#C5C5C5' VerticalAlignment='Center'/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
 
-                    <!-- Window Control Buttons -->
-                    <StackPanel Grid.Column='2' Orientation='Horizontal' VerticalAlignment='Center'>
-                        <Button Name='btnMinimize' Style='{StaticResource WinControlBtn}' Content='—' FontWeight='Bold'/>
-                        <Button Name='btnMaximize' Style='{StaticResource WinControlBtn}' Content='▢' FontWeight='Bold'/>
-                        <Button Name='btnClose' Style='{StaticResource WinCloseBtn}' Content='✕' FontWeight='Bold'/>
+                    <!-- Native Win11 Caption Buttons -->
+                    <StackPanel Grid.Column='2' Orientation='Horizontal' VerticalAlignment='Top'>
+                        <Button Name='btnMinimize' Style='{StaticResource WinControlBtn}' Content='&#xE921;' FontFamily='Segoe Fluent Icons, Segoe MDL2 Assets' FontSize='10'/>
+                        <Button Name='btnMaximize' Style='{StaticResource WinControlBtn}' Content='&#xE922;' FontFamily='Segoe Fluent Icons, Segoe MDL2 Assets' FontSize='10'/>
+                        <Button Name='btnClose' Style='{StaticResource WinCloseBtn}' Content='&#xE8BB;' FontFamily='Segoe Fluent Icons, Segoe MDL2 Assets' FontSize='10'/>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Update Available Notification Banner -->
-            <Border Grid.Row='1' Name='bannerUpdate' Background='{StaticResource BrushBannerUpdate}' BorderBrush='{StaticResource BrushAccent}' BorderThickness='0,0,0,1' Padding='16,8' Visibility='Collapsed'>
+            <!-- Win11 InfoBar Update Banner -->
+            <Border Grid.Row='1' Name='bannerUpdate' Background='{StaticResource BrushBannerUpdate}' BorderBrush='#3A3A3A' BorderThickness='0,1,0,1' Padding='16,8' Visibility='Collapsed' CornerRadius='0'>
                 <Grid>
                     <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
-                        <TextBlock Text='⭐' FontSize='14' Margin='0,0,8,0'/>
-                        <TextBlock Name='txtUpdateNotice' Text='A new release of OmniClean is available!' FontSize='12' FontWeight='SemiBold' Foreground='#E0E7FF' VerticalAlignment='Center'/>
+                        <Ellipse Width='8' Height='8' Fill='#60CDFF' Margin='0,0,10,0' VerticalAlignment='Center'/>
+                        <TextBlock Name='txtUpdateNotice' Text='A new release of OmniClean is available!' FontSize='12' FontWeight='Normal' Foreground='#FFFFFF' VerticalAlignment='Center'/>
                     </StackPanel>
-                    <Button Name='btnDownloadUpdate' Content='View Release on GitHub' HorizontalAlignment='Right' Style='{StaticResource PrimaryBtn}' Padding='14,4' FontSize='11'/>
+                    <Button Name='btnDownloadUpdate' Content='View Release on GitHub' HorizontalAlignment='Right' Style='{StaticResource PrimaryBtn}' Padding='12,4' FontSize='11'/>
                 </Grid>
             </Border>
 
-            <!-- Main App Body: Left Sidebar + Right Workspace -->
+            <!-- Main App Body: Left NavigationView + Right Layered Workspace -->
             <Grid Grid.Row='2'>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width='240'/>
                     <ColumnDefinition Width='*'/>
                 </Grid.ColumnDefinitions>
 
-                <!-- LEFT SIDEBAR -->
-                <Border Grid.Column='0' Background='{StaticResource BrushSidebar}' BorderBrush='#1E2943' BorderThickness='0,0,1,0' Padding='12,14'>
+                <!-- LEFT NAVIGATION PANE -->
+                <Border Grid.Column='0' Background='{StaticResource BrushSidebar}' Padding='10,8,10,12'>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height='*'/>
@@ -724,18 +694,15 @@ namespace OmniClean {
 
                         <!-- Navigation Items -->
                         <StackPanel Grid.Row='0'>
-                            <TextBlock Text='NAVIGATION' FontSize='10' FontWeight='Bold' Foreground='#5B6B8C' Margin='10,0,0,10'/>
-
                             <!-- Nav 0: Storage Cleaner -->
                             <Button Name='btnNavCleaner' Style='{StaticResource SidebarNavBtn}'>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='Auto'/>
                                         <ColumnDefinition Width='*'/>
-                                        <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Name='barNavCleaner' Grid.Column='0' Width='3' Height='18' Background='#6366F1' CornerRadius='2' Margin='0,0,10,0' Visibility='Visible'/>
-                                    <TextBlock Grid.Column='1' Text='🧹 Storage Cleaner' VerticalAlignment='Center'/>
+                                    <Border Name='barNavCleaner' Grid.Column='0' Width='3' Height='16' Background='#60CDFF' CornerRadius='1.5' Margin='0,0,10,0' Visibility='Visible'/>
+                                    <TextBlock Grid.Column='1' Text='🧹  Storage Cleaner' VerticalAlignment='Center'/>
                                 </Grid>
                             </Button>
 
@@ -745,10 +712,9 @@ namespace OmniClean {
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='Auto'/>
                                         <ColumnDefinition Width='*'/>
-                                        <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Name='barNavLargeFiles' Grid.Column='0' Width='3' Height='18' Background='#6366F1' CornerRadius='2' Margin='0,0,10,0' Visibility='Collapsed'/>
-                                    <TextBlock Grid.Column='1' Text='📦 Large Files Finder' VerticalAlignment='Center'/>
+                                    <Border Name='barNavLargeFiles' Grid.Column='0' Width='3' Height='16' Background='#60CDFF' CornerRadius='1.5' Margin='0,0,10,0' Visibility='Collapsed'/>
+                                    <TextBlock Grid.Column='1' Text='📦  Large Files' VerticalAlignment='Center'/>
                                 </Grid>
                             </Button>
 
@@ -758,10 +724,9 @@ namespace OmniClean {
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='Auto'/>
                                         <ColumnDefinition Width='*'/>
-                                        <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Name='barNavDuplicates' Grid.Column='0' Width='3' Height='18' Background='#6366F1' CornerRadius='2' Margin='0,0,10,0' Visibility='Collapsed'/>
-                                    <TextBlock Grid.Column='1' Text='👥 Duplicate Finder' VerticalAlignment='Center'/>
+                                    <Border Name='barNavDuplicates' Grid.Column='0' Width='3' Height='16' Background='#60CDFF' CornerRadius='1.5' Margin='0,0,10,0' Visibility='Collapsed'/>
+                                    <TextBlock Grid.Column='1' Text='👥  Duplicate Finder' VerticalAlignment='Center'/>
                                 </Grid>
                             </Button>
 
@@ -771,10 +736,9 @@ namespace OmniClean {
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='Auto'/>
                                         <ColumnDefinition Width='*'/>
-                                        <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Name='barNavStartup' Grid.Column='0' Width='3' Height='18' Background='#6366F1' CornerRadius='2' Margin='0,0,10,0' Visibility='Collapsed'/>
-                                    <TextBlock Grid.Column='1' Text='🚀 Startup Optimizer' VerticalAlignment='Center'/>
+                                    <Border Name='barNavStartup' Grid.Column='0' Width='3' Height='16' Background='#60CDFF' CornerRadius='1.5' Margin='0,0,10,0' Visibility='Collapsed'/>
+                                    <TextBlock Grid.Column='1' Text='🚀  Startup Apps' VerticalAlignment='Center'/>
                                 </Grid>
                             </Button>
 
@@ -784,35 +748,34 @@ namespace OmniClean {
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width='Auto'/>
                                         <ColumnDefinition Width='*'/>
-                                        <ColumnDefinition Width='Auto'/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Name='barNavSettings' Grid.Column='0' Width='3' Height='18' Background='#6366F1' CornerRadius='2' Margin='0,0,10,0' Visibility='Collapsed'/>
-                                    <TextBlock Grid.Column='1' Text='⚙️ Automation &amp; About' VerticalAlignment='Center'/>
+                                    <Border Name='barNavSettings' Grid.Column='0' Width='3' Height='16' Background='#60CDFF' CornerRadius='1.5' Margin='0,0,10,0' Visibility='Collapsed'/>
+                                    <TextBlock Grid.Column='1' Text='⚙️  Settings &amp; About' VerticalAlignment='Center'/>
                                 </Grid>
                             </Button>
                         </StackPanel>
 
-                        <!-- Bottom Sidebar: Live Telemetry Widget -->
-                        <Border Grid.Row='1' Background='{StaticResource BrushHealthCard}' BorderBrush='#223050' BorderThickness='1' CornerRadius='10' Padding='12,10'>
+                        <!-- Bottom Sidebar: System Telemetry Card -->
+                        <Border Grid.Row='1' Background='{StaticResource BrushHealthCard}' BorderBrush='#383838' BorderThickness='1' CornerRadius='8' Padding='12,10'>
                             <StackPanel>
-                                <TextBlock Text='SYSTEM HEALTH' FontSize='10' FontWeight='Bold' Foreground='#64748B' Margin='0,0,0,6'/>
-                                <TextBlock Name='txtSidebarCpu' Text='CPU: Detecting...' FontSize='11' FontWeight='SemiBold' Foreground='#CBD5E1' TextTrimming='CharacterEllipsis' Margin='0,0,0,4'/>
+                                <TextBlock Text='System Memory' FontSize='11' FontWeight='SemiBold' Foreground='#FFFFFF' Margin='0,0,0,4'/>
+                                <TextBlock Name='txtSidebarCpu' Text='CPU: Detecting...' FontSize='11' Foreground='#C5C5C5' TextTrimming='CharacterEllipsis' Margin='0,0,0,4'/>
                                 
-                                <Grid Margin='0,0,0,4'>
-                                    <TextBlock Name='txtSidebarRam' Text='RAM: -- / -- GB' FontSize='11' Foreground='#94A3B8'/>
+                                <Grid Margin='0,0,0,5'>
+                                    <TextBlock Name='txtSidebarRam' Text='RAM: -- / -- GB' FontSize='11' Foreground='#8A8A8A'/>
                                 </Grid>
-                                <ProgressBar Name='barSidebarRam' Height='8' Value='40' Maximum='100' Foreground='{StaticResource BrushProgressSky}' Background='#080D18' BorderThickness='0' Margin='0,0,0,8'/>
+                                <ProgressBar Name='barSidebarRam' Height='4' Value='40' Maximum='100' Foreground='{StaticResource BrushProgressSky}' Background='#1A1A1A' BorderThickness='0' Margin='0,0,0,10'/>
 
-                                <Button Name='btnQuickFlushRam' Content='⚡ Flush Standby RAM' Style='{StaticResource SecondaryBtn}' Padding='8,4' FontSize='10' HorizontalAlignment='Stretch'/>
+                                <Button Name='btnQuickFlushRam' Content='Flush Standby RAM' Style='{StaticResource SecondaryBtn}' Padding='8,5' FontSize='11' HorizontalAlignment='Stretch'/>
                                 
-                                <TextBlock Name='txtSidebarUptime' Text='Uptime: --' FontSize='10' Foreground='#64748B' Margin='0,8,0,0' HorizontalAlignment='Center'/>
+                                <TextBlock Name='txtSidebarUptime' Text='Uptime: --' FontSize='10' Foreground='#8A8A8A' Margin='0,8,0,0' HorizontalAlignment='Center'/>
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Border>
 
-                <!-- RIGHT WORKSPACE CANVAS -->
-                <Grid Grid.Column='1' Margin='18,14'>
+                <!-- RIGHT WORKSPACE SURFACE (Win11 Layered Page Container) -->
+                <Border Grid.Column='1' Background='{StaticResource BrushWorkspace}' BorderBrush='#333333' BorderThickness='1,1,0,0' CornerRadius='8,0,0,0' Padding='20,16'>
                     <TabControl Name='mainTabControl' Background='Transparent' BorderThickness='0'>
                         <TabControl.ItemContainerStyle>
                             <Style TargetType='TabItem'>
@@ -828,48 +791,45 @@ namespace OmniClean {
                                     <RowDefinition Height='*'/>
                                 </Grid.RowDefinitions>
 
-                                <!-- Header Bar: View Title + Drive Selector + Top Actions -->
-                                <Grid Grid.Row='0' Margin='0,0,0,14'>
+                                <!-- Page Header -->
+                                <Grid Grid.Row='0' Margin='0,0,0,16'>
                                     <StackPanel VerticalAlignment='Center'>
-                                        <TextBlock Text='Storage Cleaner' FontSize='20' FontWeight='Bold' Foreground='{StaticResource BrushTitleText}'/>
-                                        <TextBlock Text='Inspect drives and safely purge redundant caches and temporary storage' FontSize='12' Foreground='#94A3B8'/>
+                                        <TextBlock Text='Storage Cleaner' FontSize='22' FontWeight='SemiBold' Foreground='{StaticResource BrushTitleText}'/>
+                                        <TextBlock Text='Inspect drives and safely purge temporary caches' FontSize='12' Foreground='#C5C5C5' Margin='0,2,0,0'/>
                                     </StackPanel>
                                     <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' VerticalAlignment='Center'>
-                                        <Border Background='#131C33' BorderBrush='#2A3B5E' BorderThickness='1' CornerRadius='7' Padding='8,4' Margin='0,0,8,0'>
+                                        <Border Background='#2C2C2C' BorderBrush='#3A3A3A' BorderThickness='1' CornerRadius='4' Padding='8,3' Margin='0,0,8,0'>
                                             <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
-                                                <TextBlock Text='Drive:' FontSize='12' FontWeight='Bold' Foreground='#94A3B8' VerticalAlignment='Center' Margin='0,0,6,0'/>
-                                                <ComboBox Name='cmbDrive' Width='110' Height='24' Background='#0E1424' Foreground='#F8FAFC' BorderThickness='0'/>
+                                                <TextBlock Text='Drive' FontSize='12' Foreground='#C5C5C5' VerticalAlignment='Center' Margin='0,0,8,0'/>
+                                                <ComboBox Name='cmbDrive' Width='110' Height='24'/>
                                             </StackPanel>
                                         </Border>
-                                        <Button Name='btnRescan' Content='🔄 Rescan' Style='{StaticResource SecondaryBtn}' Margin='0,0,6,0'/>
-                                        <Button Name='btnOptimizeRam' Content='⚡ Flush RAM' Style='{StaticResource SecondaryBtn}'/>
+                                        <Button Name='btnRescan' Content='Rescan' Style='{StaticResource SecondaryBtn}' Margin='0,0,6,0'/>
+                                        <Button Name='btnOptimizeRam' Content='Flush RAM' Style='{StaticResource SecondaryBtn}'/>
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- Two-Column Content: Left Stats & Console, Right Categories -->
+                                <!-- Two-Column Content -->
                                 <Grid Grid.Row='1'>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width='340'/>
+                                        <ColumnDefinition Width='330'/>
                                         <ColumnDefinition Width='*'/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Left Column: Drive Capacity Gauge + Live Activity Console -->
+                                    <!-- Left Column: Drive Capacity + Activity Console -->
                                     <Grid Grid.Column='0' Margin='0,0,14,0'>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height='Auto'/>
                                             <RowDefinition Height='*'/>
                                         </Grid.RowDefinitions>
 
-                                        <!-- Disk Space Hero Card -->
-                                        <Border Grid.Row='0' Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='16' Margin='0,0,0,12'>
-                                            <Border.Effect>
-                                                <DropShadowEffect Color='#000000' BlurRadius='24' ShadowDepth='3' Direction='270' Opacity='0.30'/>
-                                            </Border.Effect>
+                                        <!-- Win11 Storage Sense Style Drive Card -->
+                                        <Border Grid.Row='0' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='16' Margin='0,0,0,12'>
                                             <StackPanel>
-                                                <TextBlock Text='DRIVE CAPACITY' FontSize='10' FontWeight='Bold' Foreground='#64748B' Margin='0,0,0,6'/>
-                                                <TextBlock Name='txtDiskPercent' Text='--% Free' FontSize='32' FontWeight='Bold' Foreground='#10B981' Margin='0,0,0,2'/>
-                                                <TextBlock Name='txtDiskRatio' Text='-- GB Free / -- GB' FontSize='12' Foreground='#94A3B8' Margin='0,0,0,10'/>
-                                                <ProgressBar Name='diskProgress' Height='12' Value='30' Maximum='100' Foreground='{StaticResource BrushProgressMint}' Background='#080D18' BorderThickness='0' Margin='0,0,0,14'/>
+                                                <TextBlock Text='Local Disk Capacity' FontSize='12' FontWeight='SemiBold' Foreground='#C5C5C5' Margin='0,0,0,6'/>
+                                                <TextBlock Name='txtDiskPercent' Text='--% Free' FontSize='28' FontWeight='SemiBold' Foreground='#FFFFFF' Margin='0,0,0,2'/>
+                                                <TextBlock Name='txtDiskRatio' Text='-- GB Free / -- GB' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,10'/>
+                                                <ProgressBar Name='diskProgress' Height='8' Value='30' Maximum='100' Foreground='{StaticResource BrushProgressMint}' Background='#1A1A1A' BorderThickness='0' Margin='0,0,0,14'/>
 
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -877,22 +837,22 @@ namespace OmniClean {
                                                         <ColumnDefinition Width='*'/>
                                                         <ColumnDefinition Width='*'/>
                                                     </Grid.ColumnDefinitions>
-                                                    <Border Grid.Column='0' Background='#0A0E1A' Padding='6,8' Margin='0,0,4,0' CornerRadius='8'>
-                                                        <StackPanel HorizontalAlignment='Center'>
-                                                            <TextBlock Text='Free' FontSize='10' Foreground='#64748B'/>
-                                                            <TextBlock Name='txtStatFree' Text='-- GB' FontSize='12' FontWeight='Bold' Foreground='#10B981'/>
+                                                    <Border Grid.Column='0' Background='#222222' BorderBrush='#333333' BorderThickness='1' Padding='8,8' Margin='0,0,4,0' CornerRadius='4'>
+                                                        <StackPanel>
+                                                            <TextBlock Text='Free' FontSize='10' Foreground='#8A8A8A'/>
+                                                            <TextBlock Name='txtStatFree' Text='-- GB' FontSize='12' FontWeight='SemiBold' Foreground='#6CCB5F'/>
                                                         </StackPanel>
                                                     </Border>
-                                                    <Border Grid.Column='1' Background='#0A0E1A' Padding='6,8' Margin='2,0,2,0' CornerRadius='8'>
-                                                        <StackPanel HorizontalAlignment='Center'>
-                                                            <TextBlock Text='Used' FontSize='10' Foreground='#64748B'/>
-                                                            <TextBlock Name='txtStatUsed' Text='-- GB' FontSize='12' FontWeight='Bold' Foreground='#818CF8'/>
+                                                    <Border Grid.Column='1' Background='#222222' BorderBrush='#333333' BorderThickness='1' Padding='8,8' Margin='2,0,2,0' CornerRadius='4'>
+                                                        <StackPanel>
+                                                            <TextBlock Text='Used' FontSize='10' Foreground='#8A8A8A'/>
+                                                            <TextBlock Name='txtStatUsed' Text='-- GB' FontSize='12' FontWeight='SemiBold' Foreground='#60CDFF'/>
                                                         </StackPanel>
                                                     </Border>
-                                                    <Border Grid.Column='2' Background='#0A0E1A' Padding='6,8' Margin='4,0,0,0' CornerRadius='8'>
-                                                        <StackPanel HorizontalAlignment='Center'>
-                                                            <TextBlock Text='Total' FontSize='10' Foreground='#64748B'/>
-                                                            <TextBlock Name='txtStatTotal' Text='-- GB' FontSize='12' FontWeight='Bold' Foreground='#38BDF8'/>
+                                                    <Border Grid.Column='2' Background='#222222' BorderBrush='#333333' BorderThickness='1' Padding='8,8' Margin='4,0,0,0' CornerRadius='4'>
+                                                        <StackPanel>
+                                                            <TextBlock Text='Total' FontSize='10' Foreground='#8A8A8A'/>
+                                                            <TextBlock Name='txtStatTotal' Text='-- GB' FontSize='12' FontWeight='SemiBold' Foreground='#FFFFFF'/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -900,7 +860,7 @@ namespace OmniClean {
                                         </Border>
 
                                         <!-- Live Diagnostic Activity Console -->
-                                        <Border Grid.Row='1' Background='{StaticResource BrushInnerPanel}' BorderBrush='#1C2942' BorderThickness='1' Padding='12'>
+                                        <Border Grid.Row='1' Background='{StaticResource BrushInnerPanel}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='12'>
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height='Auto'/>
@@ -908,24 +868,21 @@ namespace OmniClean {
                                                 </Grid.RowDefinitions>
                                                 <Grid Grid.Row='0' Margin='0,0,0,8'>
                                                     <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
-                                                        <Ellipse Width='7' Height='7' Fill='#06B6D4' Margin='0,0,6,0'/>
-                                                        <TextBlock Text='Activity Console' FontSize='11' FontWeight='SemiBold' Foreground='#94A3B8'/>
+                                                        <Ellipse Width='6' Height='6' Fill='#60CDFF' Margin='0,0,6,0'/>
+                                                        <TextBlock Text='Activity Console' FontSize='12' FontWeight='SemiBold' Foreground='#C5C5C5'/>
                                                     </StackPanel>
                                                     <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
-                                                        <Button Name='btnClearLog' Content='Clear' Background='Transparent' Foreground='#64748B' BorderThickness='0' FontSize='10' Margin='0,0,8,0' Cursor='Hand'/>
-                                                        <Button Name='btnExportLog' Content='Export Log' Background='Transparent' Foreground='#38BDF8' BorderThickness='0' FontSize='10' Cursor='Hand'/>
+                                                        <Button Name='btnClearLog' Content='Clear' Background='Transparent' Foreground='#8A8A8A' BorderThickness='0' FontSize='11' Margin='0,0,10,0' Cursor='Hand'/>
+                                                        <Button Name='btnExportLog' Content='Export' Background='Transparent' Foreground='#60CDFF' BorderThickness='0' FontSize='11' Cursor='Hand'/>
                                                     </StackPanel>
                                                 </Grid>
-                                                <TextBox Grid.Row='1' Name='txtConsole' IsReadOnly='True' Background='Transparent' Foreground='#CBD5E1' BorderThickness='0' FontFamily='Consolas' FontSize='11' VerticalScrollBarVisibility='Auto' TextWrapping='Wrap'/>
+                                                <TextBox Grid.Row='1' Name='txtConsole' IsReadOnly='True' Background='Transparent' Foreground='#D4D4D4' BorderThickness='0' FontFamily='Cascadia Code, Consolas' FontSize='11' VerticalScrollBarVisibility='Auto' TextWrapping='Wrap'/>
                                             </Grid>
                                         </Border>
                                     </Grid>
 
                                     <!-- Right Column: Cleanable Targets & Bottom Action Dock -->
-                                    <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='16'>
-                                        <Border.Effect>
-                                            <DropShadowEffect Color='#000000' BlurRadius='24' ShadowDepth='3' Direction='270' Opacity='0.30'/>
-                                        </Border.Effect>
+                                    <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='16'>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height='Auto'/>
@@ -935,21 +892,21 @@ namespace OmniClean {
                                             </Grid.RowDefinitions>
 
                                             <!-- Categories Filter Header -->
-                                            <Grid Grid.Row='0' Margin='0,0,0,10'>
+                                            <Grid Grid.Row='0' Margin='0,0,0,12'>
                                                 <StackPanel>
-                                                    <TextBlock Text='Cleanable Targets' FontSize='16' FontWeight='Bold' Foreground='White'/>
-                                                    <TextBlock Text='Select items to safely clear without affecting personal files' FontSize='11' Foreground='#94A3B8'/>
+                                                    <TextBlock Text='Temporary Files &amp; Caches' FontSize='15' FontWeight='SemiBold' Foreground='White'/>
+                                                    <TextBlock Text='Personal files and browser passwords are never touched' FontSize='11' Foreground='#8A8A8A'/>
                                                 </StackPanel>
                                                 <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' VerticalAlignment='Center'>
-                                                    <Button Name='btnSelectAll' Content='Select All' Style='{StaticResource SecondaryBtn}' Padding='8,4' FontSize='11' Margin='0,0,5,0'/>
-                                                    <Button Name='btnSelectSafe' Content='Safe Default' Style='{StaticResource SecondaryBtn}' Padding='8,4' FontSize='11' Margin='0,0,5,0'/>
-                                                    <Button Name='btnClearAll' Content='Clear' Style='{StaticResource SecondaryBtn}' Padding='8,4' FontSize='11'/>
+                                                    <Button Name='btnSelectAll' Content='Select All' Style='{StaticResource SecondaryBtn}' Padding='9,4' FontSize='11' Margin='0,0,5,0'/>
+                                                    <Button Name='btnSelectSafe' Content='Recommended' Style='{StaticResource SecondaryBtn}' Padding='9,4' FontSize='11' Margin='0,0,5,0'/>
+                                                    <Button Name='btnClearAll' Content='Clear' Style='{StaticResource SecondaryBtn}' Padding='9,4' FontSize='11'/>
                                                 </StackPanel>
                                             </Grid>
 
                                             <!-- In-App Success Banner -->
-                                            <Border Grid.Row='1' Name='bannerSuccess' Background='#0D2721' BorderBrush='#10B981' BorderThickness='1' Padding='12,8' Margin='0,0,0,10' CornerRadius='8' Visibility='Collapsed'>
-                                                <TextBlock Name='txtSuccessMsg' Text='Cleanup completed successfully.' FontSize='12' FontWeight='SemiBold' Foreground='#34D399'/>
+                                            <Border Grid.Row='1' Name='bannerSuccess' Background='#1E2E22' BorderBrush='#6CCB5F' BorderThickness='1' Padding='12,8' Margin='0,0,0,10' CornerRadius='4' Visibility='Collapsed'>
+                                                <TextBlock Name='txtSuccessMsg' Text='Cleanup completed successfully.' FontSize='12' FontWeight='Normal' Foreground='#6CCB5F'/>
                                             </Border>
 
                                             <!-- Scrollable Category Cards -->
@@ -958,15 +915,15 @@ namespace OmniClean {
                                             </ScrollViewer>
 
                                             <!-- Bottom Action Dock -->
-                                            <Border Grid.Row='3' Background='{StaticResource BrushInnerPanel}' BorderBrush='#243252' BorderThickness='1' Padding='14,10' CornerRadius='10'>
+                                            <Border Grid.Row='3' Background='#222222' BorderBrush='#383838' BorderThickness='1' Padding='14,10' CornerRadius='6'>
                                                 <Grid>
                                                     <StackPanel VerticalAlignment='Center'>
-                                                        <TextBlock Text='Selected to Reclaim:' FontSize='11' Foreground='#94A3B8'/>
-                                                        <TextBlock Name='txtSelectedSize' Text='0.00 MB' FontSize='22' FontWeight='Bold' Foreground='#F8FAFC'/>
+                                                        <TextBlock Text='Selected to Reclaim' FontSize='11' Foreground='#8A8A8A'/>
+                                                        <TextBlock Name='txtSelectedSize' Text='0.00 MB' FontSize='20' FontWeight='SemiBold' Foreground='#FFFFFF'/>
                                                     </StackPanel>
                                                     <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' VerticalAlignment='Center'>
-                                                        <CheckBox Name='chkDryRun' Content='Dry Run (Simulation Only)' FontSize='12' Margin='0,0,16,0' VerticalAlignment='Center'/>
-                                                        <Button Name='btnClean' Content='⚡ Clean Selected Storage' Style='{StaticResource PrimaryBtn}' Padding='24,12' FontSize='14'/>
+                                                        <CheckBox Name='chkDryRun' Content='Preview only (Dry Run)' FontSize='12' Margin='0,0,16,0' VerticalAlignment='Center'/>
+                                                        <Button Name='btnClean' Content='Clean Selected Storage' Style='{StaticResource PrimaryBtn}' Padding='20,9' FontSize='13'/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -978,7 +935,7 @@ namespace OmniClean {
 
                         <!-- ================= TAB 1: LARGE FILES FINDER ================= -->
                         <TabItem>
-                            <Border Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='18'>
+                            <Border Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='18'>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height='Auto'/>
@@ -986,24 +943,22 @@ namespace OmniClean {
                                         <RowDefinition Height='*'/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Header -->
                                     <Grid Grid.Row='0' Margin='0,0,0,14'>
                                         <StackPanel>
-                                            <TextBlock Text='Large Files Profiler' FontSize='20' FontWeight='Bold' Foreground='{StaticResource BrushTitleText}'/>
-                                            <TextBlock Name='txtLargeFilesSummary' Text='Discover large files (>100 MB) consuming your storage space.' FontSize='12' Foreground='#94A3B8'/>
+                                            <TextBlock Text='Large Files Profiler' FontSize='20' FontWeight='SemiBold' Foreground='{StaticResource BrushTitleText}'/>
+                                            <TextBlock Name='txtLargeFilesSummary' Text='Discover large files (&gt;100 MB) consuming your storage space.' FontSize='12' Foreground='#C5C5C5'/>
                                         </StackPanel>
                                         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
-                                            <Button Name='btnStopLargeFiles' Content='⏹ Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
-                                            <Button Name='btnScanLargeFiles' Content='🔍 Scan for Large Files' Style='{StaticResource PrimaryBtn}' Padding='18,8'/>
+                                            <Button Name='btnStopLargeFiles' Content='Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
+                                            <Button Name='btnScanLargeFiles' Content='Scan for Large Files' Style='{StaticResource PrimaryBtn}' Padding='16,8'/>
                                         </StackPanel>
                                     </Grid>
 
-                                    <!-- Size Filters -->
                                     <StackPanel Grid.Row='1' Orientation='Horizontal' Margin='0,0,0,12'>
-                                        <TextBlock Text='Filter by Size:' FontSize='11' Foreground='#64748B' VerticalAlignment='Center' Margin='0,0,8,0'/>
+                                        <TextBlock Text='Minimum Size:' FontSize='11' Foreground='#8A8A8A' VerticalAlignment='Center' Margin='0,0,8,0'/>
                                         <Button Name='btnFilterAll100' Content='All (&gt;100 MB)' Style='{StaticResource SecondaryBtn}' Padding='10,4' FontSize='11' Margin='0,0,6,0'/>
                                         <Button Name='btnFilter500MB' Content='&gt;500 MB' Style='{StaticResource SecondaryBtn}' Padding='10,4' FontSize='11' Margin='0,0,6,0'/>
-                                        <Button Name='btnFilter1GB' Content='&gt;1 GB (Huge)' Style='{StaticResource SecondaryBtn}' Padding='10,4' FontSize='11'/>
+                                        <Button Name='btnFilter1GB' Content='&gt;1 GB' Style='{StaticResource SecondaryBtn}' Padding='10,4' FontSize='11'/>
                                     </StackPanel>
 
                                     <ScrollViewer Grid.Row='2' VerticalScrollBarVisibility='Auto'>
@@ -1015,23 +970,22 @@ namespace OmniClean {
 
                         <!-- ================= TAB 2: DUPLICATE FINDER ================= -->
                         <TabItem>
-                            <Border Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='18'>
+                            <Border Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='18'>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height='Auto'/>
                                         <RowDefinition Height='*'/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Header -->
                                     <Grid Grid.Row='0' Margin='0,0,0,14'>
                                         <StackPanel>
-                                            <TextBlock Text='Cryptographic Duplicate Finder' FontSize='20' FontWeight='Bold' Foreground='{StaticResource BrushTitleText}'/>
-                                            <TextBlock Name='txtDuplicatesSummary' Text='Scans user folders for 100% byte-matched duplicate files using SHA-256 cryptographic hashing.' FontSize='12' Foreground='#94A3B8'/>
+                                            <TextBlock Text='Duplicate Finder' FontSize='20' FontWeight='SemiBold' Foreground='{StaticResource BrushTitleText}'/>
+                                            <TextBlock Name='txtDuplicatesSummary' Text='Scans user folders for 100% byte-matched duplicate files using SHA-256 hashing.' FontSize='12' Foreground='#C5C5C5'/>
                                         </StackPanel>
                                         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
-                                            <Button Name='btnCleanAllDuplicates' Content='🧹 Delete All Duplicate Copies' Style='{StaticResource SecondaryBtn}' Margin='0,0,8,0' Padding='14,8'/>
-                                            <Button Name='btnStopDuplicates' Content='⏹ Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
-                                            <Button Name='btnScanDuplicates' Content='🔎 Find Duplicates' Style='{StaticResource PrimaryBtn}' Padding='18,8'/>
+                                            <Button Name='btnCleanAllDuplicates' Content='Delete All Duplicate Copies' Style='{StaticResource SecondaryBtn}' Margin='0,0,8,0' Padding='14,8'/>
+                                            <Button Name='btnStopDuplicates' Content='Stop' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,8,0' Visibility='Collapsed'/>
+                                            <Button Name='btnScanDuplicates' Content='Find Duplicates' Style='{StaticResource PrimaryBtn}' Padding='16,8'/>
                                         </StackPanel>
                                     </Grid>
 
@@ -1044,20 +998,19 @@ namespace OmniClean {
 
                         <!-- ================= TAB 3: STARTUP OPTIMIZER ================= -->
                         <TabItem>
-                            <Border Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='18'>
+                            <Border Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='18'>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height='Auto'/>
                                         <RowDefinition Height='*'/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Header -->
                                     <Grid Grid.Row='0' Margin='0,0,0,14'>
                                         <StackPanel>
-                                            <TextBlock Text='Startup Applications Optimizer' FontSize='20' FontWeight='Bold' Foreground='{StaticResource BrushTitleText}'/>
-                                            <TextBlock Name='txtStartupSummary' Text='Manage background launchers in Windows Registry to speed up PC boot time and reduce idle RAM.' FontSize='12' Foreground='#94A3B8'/>
+                                            <TextBlock Text='Startup Apps' FontSize='20' FontWeight='SemiBold' Foreground='{StaticResource BrushTitleText}'/>
+                                            <TextBlock Name='txtStartupSummary' Text='Configure apps that start automatically when you sign in to Windows.' FontSize='12' Foreground='#C5C5C5'/>
                                         </StackPanel>
-                                        <Button Name='btnScanStartup' Content='🔄 Refresh Startup List' Style='{StaticResource SecondaryBtn}' HorizontalAlignment='Right' Padding='14,8'/>
+                                        <Button Name='btnScanStartup' Content='Refresh List' Style='{StaticResource SecondaryBtn}' HorizontalAlignment='Right' Padding='14,8'/>
                                     </Grid>
 
                                     <ScrollViewer Grid.Row='1' VerticalScrollBarVisibility='Auto'>
@@ -1076,49 +1029,43 @@ namespace OmniClean {
                                 </Grid.ColumnDefinitions>
 
                                 <!-- Left Card: Maintenance Automation -->
-                                <Border Grid.Column='0' Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='20' Margin='0,0,10,0'>
-                                    <Border.Effect>
-                                        <DropShadowEffect Color='#000000' BlurRadius='24' ShadowDepth='3' Direction='270' Opacity='0.30'/>
-                                    </Border.Effect>
+                                <Border Grid.Column='0' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='20' Margin='0,0,8,0'>
                                     <StackPanel>
-                                        <TextBlock Text='Automated Maintenance' FontSize='18' FontWeight='Bold' Foreground='White' Margin='0,0,0,6'/>
-                                        <TextBlock Text='Schedule silent background cleaning via Windows Task Scheduler. Cleans Recycle Bin, temp files, and caches automatically without any user interaction.' FontSize='12' Foreground='#94A3B8' TextWrapping='Wrap' Margin='0,0,0,16'/>
+                                        <TextBlock Text='Automated Maintenance' FontSize='17' FontWeight='SemiBold' Foreground='White' Margin='0,0,0,6'/>
+                                        <TextBlock Text='Schedule silent background cleaning via Windows Task Scheduler. Cleans Recycle Bin, temp files, and caches automatically.' FontSize='12' Foreground='#C5C5C5' TextWrapping='Wrap' Margin='0,0,0,16'/>
 
-                                        <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#1C2942' BorderThickness='1' CornerRadius='8' Padding='14' Margin='0,0,0,16'>
+                                        <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#383838' BorderThickness='1' CornerRadius='6' Padding='14' Margin='0,0,0,16'>
                                             <StackPanel>
-                                                <CheckBox Name='chkAutoClean' Content='Enable Weekly Silent Auto-Clean (Sundays at 12:00 PM)' Margin='0,0,0,8'/>
-                                                <TextBlock Name='txtScheduleStatus' Text='Status: Checking schedule...' FontSize='11' Foreground='#64748B'/>
+                                                <CheckBox Name='chkAutoClean' Content='Run weekly auto-clean (Sundays at 12:00 PM)' Margin='0,0,0,8'/>
+                                                <TextBlock Name='txtScheduleStatus' Text='Status: Checking schedule...' FontSize='11' Foreground='#8A8A8A'/>
                                             </StackPanel>
                                         </Border>
 
-                                        <TextBlock Text='Quick Shortcuts &amp; Diagnostic Actions' FontSize='13' FontWeight='SemiBold' Foreground='#CBD5E1' Margin='0,0,0,10'/>
+                                        <TextBlock Text='Quick Actions' FontSize='13' FontWeight='SemiBold' Foreground='#FFFFFF' Margin='0,0,0,10'/>
                                         <Button Name='btnCreateShortcut' Content='Create Desktop Shortcut' Style='{StaticResource SecondaryBtn}' Padding='14,8' Margin='0,0,0,8' HorizontalAlignment='Stretch'/>
                                         <Button Name='btnTestSilentClean' Content='Run Silent Clean Now (Test Run)' Style='{StaticResource SecondaryBtn}' Padding='14,8' HorizontalAlignment='Stretch'/>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Right Card: About & Hardware Telemetry -->
-                                <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='#223050' BorderThickness='1' Padding='20' Margin='10,0,0,0'>
-                                    <Border.Effect>
-                                        <DropShadowEffect Color='#000000' BlurRadius='24' ShadowDepth='3' Direction='270' Opacity='0.30'/>
-                                    </Border.Effect>
+                                <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='20' Margin='8,0,0,0'>
                                     <StackPanel>
-                                        <TextBlock Text='System &amp; Application Specs' FontSize='18' FontWeight='Bold' Foreground='White' Margin='0,0,0,6'/>
-                                        <TextBlock Text='Version 1.0.4 Universal Standalone Edition' FontSize='12' Foreground='#94A3B8' Margin='0,0,0,14'/>
+                                        <TextBlock Text='System Specifications' FontSize='17' FontWeight='SemiBold' Foreground='White' Margin='0,0,0,6'/>
+                                        <TextBlock Text='OmniClean v1.0.4 Standalone Edition' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,14'/>
 
-                                        <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#1C2942' BorderThickness='1' CornerRadius='8' Padding='14' Margin='0,0,0,16'>
+                                        <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#383838' BorderThickness='1' CornerRadius='6' Padding='14' Margin='0,0,0,16'>
                                             <StackPanel>
-                                                <TextBlock Name='txtSysSpecOs' Text='OS: Windows' FontSize='12' Foreground='#CBD5E1' Margin='0,0,0,4'/>
-                                                <TextBlock Name='txtSysSpecCpu' Text='CPU: Detecting...' FontSize='12' Foreground='#CBD5E1' Margin='0,0,0,4'/>
-                                                <TextBlock Name='txtSysSpecRam' Text='RAM: Detecting...' FontSize='12' Foreground='#CBD5E1' Margin='0,0,0,4'/>
-                                                <TextBlock Name='txtSysSpecGpu' Text='GPU: Detecting...' FontSize='12' Foreground='#CBD5E1'/>
+                                                <TextBlock Name='txtSysSpecOs' Text='OS: Windows' FontSize='12' Foreground='#FFFFFF' Margin='0,0,0,4'/>
+                                                <TextBlock Name='txtSysSpecCpu' Text='CPU: Detecting...' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,4'/>
+                                                <TextBlock Name='txtSysSpecRam' Text='RAM: Detecting...' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,4'/>
+                                                <TextBlock Name='txtSysSpecGpu' Text='GPU: Detecting...' FontSize='12' Foreground='#C5C5C5'/>
                                             </StackPanel>
                                         </Border>
 
-                                        <TextBlock Text='Safety &amp; Integrity Guarantees' FontSize='13' FontWeight='SemiBold' Foreground='#CBD5E1' Margin='0,0,0,8'/>
-                                        <TextBlock Text='• Safe by Design: Never touches browser passwords, cookies, or bookmarks.' FontSize='11' Foreground='#10B981' Margin='0,0,0,4'/>
-                                        <TextBlock Text='• Non-Destructive: Leaves personal files and SSD flash wear cycles untouched.' FontSize='11' Foreground='#10B981' Margin='0,0,0,4'/>
-                                        <TextBlock Text='• Zero Background Resident Daemons: 0% idle CPU and RAM when closed.' FontSize='11' Foreground='#10B981' Margin='0,0,0,16'/>
+                                        <TextBlock Text='Safety Guarantees' FontSize='13' FontWeight='SemiBold' Foreground='#FFFFFF' Margin='0,0,0,8'/>
+                                        <TextBlock Text='• Never touches browser passwords, cookies, or active sessions.' FontSize='11' Foreground='#6CCB5F' Margin='0,0,0,4'/>
+                                        <TextBlock Text='• Leaves personal documents and project files untouched.' FontSize='11' Foreground='#6CCB5F' Margin='0,0,0,4'/>
+                                        <TextBlock Text='• Zero background resident processes when closed.' FontSize='11' Foreground='#6CCB5F' Margin='0,0,0,16'/>
 
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -1133,13 +1080,12 @@ namespace OmniClean {
                             </Grid>
                         </TabItem>
                     </TabControl>
-                </Grid>
+                </Border>
             </Grid>
         </Grid>
     </Border>
 </Window>";
 
-                // CI validation mode: parse the embedded XAML and report via exit code (no window).
                 if (args != null && Array.IndexOf(args, "--validate-xaml") >= 0) {
                     try {
                         XamlReader.Parse(xaml);
@@ -1153,18 +1099,15 @@ namespace OmniClean {
 
                 mainWindow = (Window)XamlReader.Parse(xaml);
 
-                // Native Win11 chrome: rounded corners, immersive dark mode, and a DWM
-                // drop shadow for this frameless window (no-op with ignored codes on older Windows).
+                // Native Windows 11 DWM Chrome: Rounded corners, Dark Mode, and Mica System Backdrop
                 IntPtr hwnd = new WindowInteropHelper(mainWindow).EnsureHandle();
                 int cornerPref = DWM_WINDOW_CORNER_ROUND;
                 DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
                 int useDark = 1;
                 DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
-                MARGINS margins = new MARGINS();
-                margins.cxLeftWidth = -1;
-                margins.cxRightWidth = -1;
-                margins.cyTopHeight = -1;
-                margins.cyBottomHeight = -1;
+                int backdropType = DWMSBT_MAINWINDOW;
+                DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
+                MARGINS margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
                 DwmExtendFrameIntoClientArea(hwnd, ref margins);
 
                 // Titlebar and Window Controls
@@ -1175,7 +1118,11 @@ namespace OmniClean {
                 txtHeaderUptimePill = (TextBlock)mainWindow.FindName("txtHeaderUptimePill");
 
                 titleBar.MouseLeftButtonDown += (s, e) => {
-                    if (e.ButtonState == MouseButtonState.Pressed) mainWindow.DragMove();
+                    if (e.ClickCount == 2) {
+                        mainWindow.WindowState = (mainWindow.WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
+                    } else if (e.ButtonState == MouseButtonState.Pressed) {
+                        mainWindow.DragMove();
+                    }
                 };
                 btnMinimize.Click += (s, e) => mainWindow.WindowState = WindowState.Minimized;
                 btnMaximize.Click += (s, e) => mainWindow.WindowState = (mainWindow.WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
@@ -1336,7 +1283,7 @@ namespace OmniClean {
                 CheckForUpdatesAsync(false);
                 StartUptimeTimer();
 
-                Log("OmniClean v1.0.4 PRO initialized.");
+                Log("OmniClean v1.0.4 initialized.");
                 Log(string.Format("Host OS: {0} ({1}-bit)", Environment.OSVersion, Environment.Is64BitOperatingSystem ? "64" : "32"));
                 Log("Select cleanable targets and click 'Clean Selected Storage'.");
 
@@ -1349,7 +1296,6 @@ namespace OmniClean {
             }
         }
 
-        // ---- v1.0.4: crash reporting ----
         static void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e) {
             try {
                 WriteCrashLog(e.Exception);
@@ -1374,8 +1320,6 @@ namespace OmniClean {
             } catch { }
         }
 
-        // ---- v1.0.4: semver-aware update comparison (a pre-release build must
-        //      not advertise an OLDER tag as "newer") ----
         static bool IsNewerVersion(string latestTag, string currentVersion) {
             string[] partsLatest = (latestTag ?? "").Trim().TrimStart('v', 'V').Split('.');
             string[] partsCurrent = (currentVersion ?? "").Trim().TrimStart('v', 'V').Split('.');
@@ -1388,7 +1332,6 @@ namespace OmniClean {
             return false;
         }
 
-        // ---- v1.0.4: cleanup audit trail (deletion manifest) ----
         static void BeginCleanManifest(bool isDryRun) {
             cleanDeletedCount = 0;
             cleanFailedCount = 0;
@@ -1447,27 +1390,25 @@ namespace OmniClean {
             if (btn == null || bar == null) return;
             bar.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
             btn.Background = isActive
-                ? (Brush)new LinearGradientBrush(Color.FromRgb(0x1A, 0x24, 0x40), Color.FromRgb(0x14, 0x1D, 0x34), 90.0)
+                ? new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D))
                 : Brushes.Transparent;
-            bar.Background = isActive
-                ? (Brush)new LinearGradientBrush(Color.FromRgb(0x81, 0x8C, 0xF8), Color.FromRgb(0x63, 0x66, 0xF1), 90.0)
-                : new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
-            btn.Foreground = isActive ? Brushes.White : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
-            btn.FontWeight = isActive ? FontWeights.Bold : FontWeights.SemiBold;
+            bar.Background = new SolidColorBrush(Color.FromRgb(0x60, 0xCD, 0xFF));
+            btn.Foreground = isActive ? Brushes.White : new SolidColorBrush(Color.FromRgb(0xC5, 0xC5, 0xC5));
+            btn.FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal;
         }
 
-        // ---- UI brush helpers (shared by all dynamically generated cards) ----
+        // ---- Win11 Fluent Card Brush Helpers ----
         static Brush CardBgBrush() {
-            return new LinearGradientBrush(Color.FromRgb(0x11, 0x1A, 0x31), Color.FromRgb(0x0D, 0x14, 0x24), 90.0);
+            return new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x25));
         }
         static Brush CardHoverBrush() {
-            return new LinearGradientBrush(Color.FromRgb(0x16, 0x21, 0x3C), Color.FromRgb(0x12, 0x1A, 0x30), 90.0);
+            return new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x2E));
         }
         static Brush CardBorderBrush() {
-            return new SolidColorBrush(Color.FromRgb(0x22, 0x30, 0x50));
+            return new SolidColorBrush(Color.FromRgb(0x36, 0x36, 0x36));
         }
         static Brush CardHoverBorderBrush() {
-            return new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
+            return new SolidColorBrush(Color.FromRgb(0x48, 0x48, 0x48));
         }
 
         static void StartUptimeTimer() {
@@ -1671,18 +1612,18 @@ namespace OmniClean {
             categories.Clear();
             pnlCategories.Children.Clear();
 
-            AddCategory("recycle_bin", "Windows Recycle Bin", "All files and deleted items sent to the Recycle Bin", "🗑️", "#EF4444");
-            AddCategory("temp_files", "System & User Temporary Files", "Windows and application temporary cache in %TEMP% and Windows\\Temp", "📁", "#3B82F6");
-            AddCategory("browser_cache", "Web Browser Caches", "Chrome, Edge, Brave, Firefox, and Opera internet cache and shader data", "🌐", "#10B981");
-            AddCategory("win_update", "Windows Update Download Cache", "Leftover update packages in SoftwareDistribution\\Download", "🔄", "#6366F1");
-            AddCategory("crash_dumps", "Error Reports & Crash Dumps", "Windows Error Reporting (WER) and memory dump logs", "⚠️", "#F59E0B");
-            AddCategory("empty_folders", "Empty Temporary Directories", "Abandoned 0-byte directories created by uninstalled applications", "📂", "#64748B");
+            AddCategory("recycle_bin", "Windows Recycle Bin", "All files and deleted items sent to the Recycle Bin", "🗑️", "#60CDFF");
+            AddCategory("temp_files", "System & User Temporary Files", "Windows and application temporary cache in %TEMP% and Windows\\Temp", "📁", "#60CDFF");
+            AddCategory("browser_cache", "Web Browser Caches", "Chrome, Edge, Brave, Firefox, and Opera internet cache and shader data", "🌐", "#60CDFF");
+            AddCategory("win_update", "Windows Update Download Cache", "Leftover update packages in SoftwareDistribution\\Download", "🔄", "#60CDFF");
+            AddCategory("crash_dumps", "Error Reports & Crash Dumps", "Windows Error Reporting (WER) and memory dump logs", "⚠️", "#FCE100");
+            AddCategory("empty_folders", "Empty Temporary Directories", "Abandoned 0-byte directories created by uninstalled applications", "📂", "#8A8A8A");
 
-            AddCategory("vscode_cache", "VS Code Caches & Crash Dumps", "Visual Studio Code installer packages and crash logs", "💻", "#38BDF8");
-            AddCategory("dev_cache", "npm & pip Package Caches", "Node.js and Python package manager cache folders", "📦", "#EC4899");
-            AddCategory("discord_cache", "Discord Client Cache", "Discord media, audio, and GPU shader caches", "💬", "#818CF8");
-            AddCategory("capcut_old", "Outdated CapCut App Versions", "Older builds leftover in AppData\\Local\\CapCut\\Apps", "🎬", "#A855F7");
-            AddCategory("nvidia_artifacts", "NVIDIA Driver Update Packages", "Downloaded GPU driver installers in NVIDIA App UpdateFramework", "🎮", "#10B981");
+            AddCategory("vscode_cache", "VS Code Caches & Crash Dumps", "Visual Studio Code installer packages and crash logs", "💻", "#60CDFF");
+            AddCategory("dev_cache", "npm & pip Package Caches", "Node.js and Python package manager cache folders", "📦", "#60CDFF");
+            AddCategory("discord_cache", "Discord Client Cache", "Discord media, audio, and GPU shader caches", "💬", "#60CDFF");
+            AddCategory("capcut_old", "Outdated CapCut App Versions", "Older builds leftover in AppData\\Local\\CapCut\\Apps", "🎬", "#60CDFF");
+            AddCategory("nvidia_artifacts", "NVIDIA Driver Update Packages", "Downloaded GPU driver installers in NVIDIA App UpdateFramework", "🎮", "#6CCB5F");
         }
 
         static void AddCategory(string id, string name, string desc, string icon, string iconBgHex) {
@@ -1690,12 +1631,11 @@ namespace OmniClean {
             card.Background = CardBgBrush();
             card.BorderBrush = CardBorderBrush();
             card.BorderThickness = new Thickness(1);
-            card.Padding = new Thickness(14, 11, 14, 11);
-            card.Margin = new Thickness(0, 0, 0, 7);
-            card.CornerRadius = new CornerRadius(10);
+            card.Padding = new Thickness(14, 10, 14, 10);
+            card.Margin = new Thickness(0, 0, 0, 5);
+            card.CornerRadius = new CornerRadius(6);
             card.Cursor = Cursors.Hand;
 
-            // Interactive hover highlight
             card.MouseEnter += (s, e) => {
                 card.Background = CardHoverBrush();
                 card.BorderBrush = CardHoverBorderBrush();
@@ -1719,28 +1659,23 @@ namespace OmniClean {
             Grid.SetColumn(chk, 0);
             grid.Children.Add(chk);
 
-            // Icon + Title & Desc
             StackPanel sp = new StackPanel();
             StackPanel titleRow = new StackPanel();
             titleRow.Orientation = Orientation.Horizontal;
 
-            // Icon chip tinted with the category color
-            Color chipColor;
-            try { chipColor = (Color)ColorConverter.ConvertFromString(iconBgHex); } catch { chipColor = Color.FromRgb(0x63, 0x66, 0xF1); }
-
             Border iconChip = new Border();
             iconChip.Width = 26;
             iconChip.Height = 26;
-            iconChip.CornerRadius = new CornerRadius(8);
+            iconChip.CornerRadius = new CornerRadius(5);
             iconChip.Margin = new Thickness(0, 0, 10, 0);
             iconChip.VerticalAlignment = VerticalAlignment.Center;
-            iconChip.Background = new SolidColorBrush(Color.FromArgb(0x26, chipColor.R, chipColor.G, chipColor.B));
-            iconChip.BorderBrush = new SolidColorBrush(Color.FromArgb(0x59, chipColor.R, chipColor.G, chipColor.B));
+            iconChip.Background = new SolidColorBrush(Color.FromRgb(0x30, 0x30, 0x30));
+            iconChip.BorderBrush = new SolidColorBrush(Color.FromRgb(0x40, 0x40, 0x40));
             iconChip.BorderThickness = new Thickness(1);
 
             TextBlock iconBlock = new TextBlock();
             iconBlock.Text = icon;
-            iconBlock.FontSize = 14;
+            iconBlock.FontSize = 13;
             iconBlock.HorizontalAlignment = HorizontalAlignment.Center;
             iconBlock.VerticalAlignment = VerticalAlignment.Center;
             iconChip.Child = iconBlock;
@@ -1749,16 +1684,16 @@ namespace OmniClean {
 
             TextBlock title = new TextBlock();
             title.Text = name;
-            title.FontWeight = FontWeights.Bold;
+            title.FontWeight = FontWeights.SemiBold;
             title.FontSize = 13;
-            title.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC));
+            title.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
             title.VerticalAlignment = VerticalAlignment.Center;
             titleRow.Children.Add(title);
 
             TextBlock txtDesc = new TextBlock();
             txtDesc.Text = desc;
             txtDesc.FontSize = 11;
-            txtDesc.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+            txtDesc.Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A));
             txtDesc.Margin = new Thickness(0, 2, 0, 0);
 
             sp.Children.Add(titleRow);
@@ -1767,18 +1702,18 @@ namespace OmniClean {
             grid.Children.Add(sp);
 
             Border badge = new Border();
-            badge.Background = new SolidColorBrush(Color.FromRgb(0x15, 0x1F, 0x35));
-            badge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x27, 0x36, 0x57));
+            badge.Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x1F));
+            badge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38));
             badge.BorderThickness = new Thickness(1);
-            badge.Padding = new Thickness(11, 4, 11, 4);
-            badge.CornerRadius = new CornerRadius(11);
+            badge.Padding = new Thickness(10, 3, 10, 3);
+            badge.CornerRadius = new CornerRadius(4);
             badge.VerticalAlignment = VerticalAlignment.Center;
 
             TextBlock txtBadge = new TextBlock();
             txtBadge.Text = "Scanning...";
             txtBadge.FontSize = 11;
-            txtBadge.FontWeight = FontWeights.Bold;
-            txtBadge.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
+            txtBadge.FontWeight = FontWeights.SemiBold;
+            txtBadge.Foreground = new SolidColorBrush(Color.FromRgb(0xC5, 0xC5, 0xC5));
             badge.Child = txtBadge;
 
             Grid.SetColumn(badge, 2);
@@ -1813,7 +1748,6 @@ namespace OmniClean {
         static void SetSafeCheckboxes() {
             foreach (var c in categories) {
                 if (c.IsInstalled) {
-                    // Safe defaults exclude crash dumps or empty folders if user prefers
                     c.CheckBoxRef.IsChecked = (c.Id != "empty_folders");
                 }
             }
@@ -1876,7 +1810,7 @@ namespace OmniClean {
                 mainWindow.Dispatcher.Invoke(new Action(() => {
                     chkAutoClean.IsChecked = hasTask;
                     txtScheduleStatus.Text = hasTask ? "Status: Active (Every Sunday at 12:00 PM)" : "Status: Disabled";
-                    txtScheduleStatus.Foreground = hasTask ? new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)) : new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+                    txtScheduleStatus.Foreground = hasTask ? new SolidColorBrush(Color.FromRgb(0x6C, 0xCB, 0x5F)) : new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A));
                 }));
             }));
         }
@@ -1900,7 +1834,7 @@ namespace OmniClean {
 
                     mainWindow.Dispatcher.Invoke(new Action(() => {
                         txtScheduleStatus.Text = enable ? "Status: Active (Every Sunday at 12:00 PM)" : "Status: Disabled";
-                        txtScheduleStatus.Foreground = enable ? new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)) : new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+                        txtScheduleStatus.Foreground = enable ? new SolidColorBrush(Color.FromRgb(0x6C, 0xCB, 0x5F)) : new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A));
                         Log(enable ? "Scheduled weekly auto-clean in Windows Task Scheduler." : "Removed auto-clean scheduled task.");
                     }));
                 } catch (Exception ex) {
@@ -1930,7 +1864,6 @@ namespace OmniClean {
             }
         }
 
-        // ================= HEADLESS SILENT CLEANUP =================
         static void PerformSilentCleanup() {
             try {
                 BeginCleanManifest(false);
