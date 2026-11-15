@@ -1,4 +1,4 @@
-﻿// OmniClean.Engine.cs
+// OmniClean.Engine.cs
 // Cleanup engine: storage scanning, category size pipeline, and deletion routines.
 // Partial class compiled together with OmniClean.cs and OmniClean.Analysis.cs.
 using System;
@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -22,31 +23,120 @@ namespace OmniClean {
             } catch { return false; }
         }
 
+        // A junction, symlink or other reparse point can point back up the
+        // directory tree. Following one during a recursive walk makes the walk
+        // loop forever and counts the same bytes many times, so every
+        // recursive traversal in OmniClean skips these entries.
+        static bool IsReparsePoint(FileSystemInfo info) {
+            try {
+                return (info.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+            } catch {
+                return false;
+            }
+        }
+
+        // Walks a directory tree and invokes onFile for every file found.
+        // Unlike Directory.GetFiles(..., SearchOption.AllDirectories) this
+        // never aborts the whole scan because one folder is unreadable, and
+        // it re-checks the cancellation token between entries so a running
+        // scan can actually be stopped.
+        // Returns true when the walk was cancelled.
+        static bool WalkFiles(string root, CancellationToken token, Action<string> onFile) {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return false;
+
+            var stack = new Stack<string>();
+            stack.Push(root);
+
+            while (stack.Count > 0) {
+                if (token.IsCancellationRequested) return true;
+                string current = stack.Pop();
+
+                string[] files = null;
+                try { files = Directory.GetFiles(current); } catch { files = null; }
+                if (files != null) {
+                    for (int i = 0; i < files.Length; i++) {
+                        if (token.IsCancellationRequested) return true;
+                        try {
+                            var fi = new FileInfo(files[i]);
+                            if (IsReparsePoint(fi)) continue;
+                            onFile(fi.FullName);
+                        } catch { }
+                    }
+                }
+
+                string[] dirs = null;
+                try { dirs = Directory.GetDirectories(current); } catch { dirs = null; }
+                if (dirs != null) {
+                    for (int i = 0; i < dirs.Length; i++) {
+                        try {
+                            if (IsReparsePoint(new DirectoryInfo(dirs[i]))) continue;
+                        } catch { continue; }
+                        stack.Push(dirs[i]);
+                    }
+                }
+            }
+            return false;
+        }
+
         static double GetDirectorySizeMB(string path) {
             if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
             double bytes = 0;
-            try {
-                var stack = new Stack<string>();
-                stack.Push(path);
-                while (stack.Count > 0) {
-                    string current = stack.Pop();
-                    try {
-                        string[] files = Directory.GetFiles(current);
-                        for (int i = 0; i < files.Length; i++) {
-                            try {
-                                bytes += new FileInfo(files[i]).Length;
-                            } catch { }
-                        }
-                    } catch { }
-                    try {
-                        string[] dirs = Directory.GetDirectories(current);
-                        for (int i = 0; i < dirs.Length; i++) {
-                            stack.Push(dirs[i]);
-                        }
-                    } catch { }
-                }
-            } catch { }
+            WalkFiles(path, CancellationToken.None, delegate(string filePath) {
+                try { bytes += new FileInfo(filePath).Length; } catch { }
+            });
             return bytes / (1024.0 * 1024.0);
+        }
+
+        // CapCut installs each build in a version-named folder ("2.9.1").
+        // A plain string sort is wrong here: "2.10.0" sorts BEFORE "2.9.1",
+        // which would make the cleanup delete the newest build and keep an
+        // old one. Compare the parsed numeric version instead.
+        static Version ParseAppVersion(string folderName) {
+            Match m = Regex.Match(folderName, @"^\d+(\.\d+){0,3}");
+            if (!m.Success) return new Version(0, 0);
+            try { return new Version(m.Value); } catch { return new Version(0, 0); }
+        }
+
+        // Returns the CapCut install folders that are older than the newest
+        // one. The newest folder is always preserved.
+        static List<string> GetCapCutOldVersionPaths(string localApp) {
+            var outdated = new List<string>();
+            string apps = Path.Combine(localApp, @"CapCut\Apps");
+            if (!Directory.Exists(apps)) return outdated;
+
+            var versioned = new List<KeyValuePair<string, Version>>();
+            try {
+                foreach (var dir in Directory.GetDirectories(apps)) {
+                    string name = Path.GetFileName(dir);
+                    if (!Regex.IsMatch(name, @"^\d+(\.\d+)+")) continue;
+                    try {
+                        if (IsReparsePoint(new DirectoryInfo(dir))) continue;
+                    } catch { continue; }
+                    versioned.Add(new KeyValuePair<string, Version>(dir, ParseAppVersion(name)));
+                }
+            } catch { return outdated; }
+
+            if (versioned.Count <= 1) return outdated;
+
+            // Highest version wins. Ties prefer the folder named exactly after
+            // the version ("2.9.1" over "2.9.1-beta") so the release build is
+            // the one that survives.
+            versioned.Sort(delegate(KeyValuePair<string, Version> a, KeyValuePair<string, Version> b) {
+                int cmp = a.Value.CompareTo(b.Value);
+                if (cmp != 0) return cmp;
+                bool aExact = string.Equals(a.Key, a.Value.ToString(), StringComparison.OrdinalIgnoreCase);
+                bool bExact = string.Equals(b.Key, b.Value.ToString(), StringComparison.OrdinalIgnoreCase);
+                if (aExact != bExact) return aExact ? 1 : -1;
+                return string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase);
+            });
+
+            string latest = versioned[versioned.Count - 1].Key;
+            foreach (var pair in versioned) {
+                if (!string.Equals(pair.Key, latest, StringComparison.OrdinalIgnoreCase)) {
+                    outdated.Add(pair.Key);
+                }
+            }
+            return outdated;
         }
 
         static List<string> GetBrowserCachePaths(string localApp, string appData) {
@@ -157,18 +247,12 @@ namespace OmniClean {
                                     installed = false;
                                 }
                             } else if (cat.Id == "capcut_old") {
-                                string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                                if (Directory.Exists(capApps)) {
-                                    var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                    if (dirs.Count > 1) {
-                                        dirs.Sort();
-                                        string latest = dirs[dirs.Count - 1];
-                                        foreach (var d in dirs) {
-                                            if (d != latest) size += GetDirectorySizeMB(d);
-                                        }
-                                    }
-                                } else {
+                                if (!Directory.Exists(Path.Combine(localApp, @"CapCut\Apps"))) {
                                     installed = false;
+                                } else {
+                                    foreach (var old in GetCapCutOldVersionPaths(localApp)) {
+                                        size += GetDirectorySizeMB(old);
+                                    }
                                 }
                             } else if (cat.Id == "vscode_cache") {
                                 string vscPath = Path.Combine(appData, "Code");
@@ -321,27 +405,17 @@ namespace OmniClean {
                             } else if (cat.Id == "nvidia_artifacts") {
                                 CleanFolder(Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts"), isDryRun);
                             } else if (cat.Id == "capcut_old") {
-                                string capApps = Path.Combine(localApp, @"CapCut\Apps");
-                                if (Directory.Exists(capApps)) {
-                                    var dirs = new List<string>(Directory.GetDirectories(capApps));
-                                    if (dirs.Count > 1) {
-                                        dirs.Sort();
-                                        string latest = dirs[dirs.Count - 1];
-                                        foreach (var d in dirs) {
-                                            if (d != latest) {
-                                                try {
-                                                    if (!isDryRun) {
-                                                        CleanFolder(d, false);
-                                                        try { Directory.Delete(d, true); } catch { }
-                                                    } else {
-                                                        Manifest("[PREVIEW] " + d + " (recursive)");
-                                                    }
-                                                } catch (Exception ex) {
-                                                    cleanFailedCount++;
-                                                    Manifest("[FAILED]  " + d + " -- " + ex.Message);
-                                                }
-                                            }
+                                foreach (var d in GetCapCutOldVersionPaths(localApp)) {
+                                    try {
+                                        if (!isDryRun) {
+                                            CleanFolder(d, false);
+                                            try { Directory.Delete(d, true); } catch { }
+                                        } else {
+                                            Manifest("[PREVIEW] " + d + " (recursive)");
                                         }
+                                    } catch (Exception ex) {
+                                        cleanFailedCount++;
+                                        Manifest("[FAILED]  " + d + " -- " + ex.Message);
                                     }
                                 }
                             } else if (cat.Id == "vscode_cache") {
@@ -452,6 +526,11 @@ namespace OmniClean {
                 if (subDirs != null) {
                     for (int i = 0; i < subDirs.Length; i++) {
                         string d = subDirs[i];
+                        // Never descend into a junction/symlink: it can point
+                        // back up the tree and the recursion would never end.
+                        try {
+                            if (IsReparsePoint(new DirectoryInfo(d))) continue;
+                        } catch { continue; }
                         CleanFolderRecursive(d, isDryRun);
                         if (!isDryRun) {
                             try {
@@ -484,6 +563,9 @@ namespace OmniClean {
             if (string.IsNullOrEmpty(startLocation) || !Directory.Exists(startLocation)) return;
             try {
                 foreach (var d in Directory.GetDirectories(startLocation)) {
+                    try {
+                        if (IsReparsePoint(new DirectoryInfo(d))) continue;
+                    } catch { continue; }
                     CleanEmptyDirectories(d, isDryRun);
                     try {
                         if (Directory.GetFileSystemEntries(d).Length == 0) {

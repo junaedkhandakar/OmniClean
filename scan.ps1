@@ -1,34 +1,41 @@
-﻿# scan.ps1 - Produces a single JSON document describing disk usage,
+# scan.ps1 - Produces a single JSON document describing disk usage,
 # cleanable categories and basic system telemetry for the web UI.
 # This script must ONLY write JSON to stdout (no logs, no stray output).
+
+param(
+    # Optional drive letter (C:, D:, ...) the scan should report on.
+    [string]$Drive = 'C:'
+)
 
 $ErrorActionPreference = "SilentlyContinue"
 . (Join-Path $PSScriptRoot 'targets.ps1')
 
-# --- System drive (all cleanup targets live on C:) ---
-$disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+$activeDrive = Set-OmniCleanActiveDrive $Drive
+
+# --- System drive metrics ---
+$totalGB = 0; $freeGB = 0; $usedGB = 0; $pctFree = 0
+$disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$activeDrive'"
 if ($disk -and $disk.Size -gt 0) {
     $totalGB = [math]::Round($disk.Size / 1GB, 2)
     $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
     $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
     $pctFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1)
-} else {
-    $totalGB = 0; $freeGB = 0; $usedGB = 0; $pctFree = 0
 }
 
 # --- Category sizes (shared definitions in targets.ps1) ---
 $categoryList = @()
 foreach ($t in (Get-OmniCleanTargets)) {
     $categoryList += [PSCustomObject]@{
-        id    = $t.id
-        name  = $t.name
-        sizeMB = Get-OmniCleanTargetSizeMB $t
-        desc  = $t.desc
+        id      = $t.id
+        name    = $t.name
+        sizeMB  = Get-OmniCleanTargetSizeMB $t
+        desc    = $t.desc
+        paths   = @(Get-OmniCleanTargetPaths $t)
     }
 }
 
 # --- Scheduled task state ---
-schtasks /query /tn "StorageOptimizerAutoClean" 2>&1 | Out-Null
+$task = schtasks /query /tn "StorageOptimizerAutoClean" 2>&1 | Out-Null
 $hasTask = ($LASTEXITCODE -eq 0)
 
 # --- Lightweight system telemetry for the header pill ---
@@ -41,22 +48,48 @@ $ramGB = if ($ramObj -and $ramObj.TotalPhysicalMemory) {
 $gpuObj = Get-CimInstance Win32_VideoController | Select-Object -First 1
 $gpu = if ($gpuObj -and $gpuObj.Name) { $gpuObj.Name.Trim() } else { '' }
 $arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
+$uptimeHours = [math]::Round(((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours, 1)
+
+# --- Available local fixed drives (for the drive picker) ---
+$drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
+    $letter = $_.DeviceID
+    # NOTE: these must NOT reuse $freeGB / $totalGB. A ForEach-Object
+    # script block shares the caller's scope, so assigning to those names
+    # here would overwrite the active drive's metrics.
+    $driveFreeGB = [math]::Round($_.FreeSpace / 1GB, 2)
+    $driveTotalGB = [math]::Round($_.Size / 1GB, 2)
+    $label = if ($_.VolumeName) { "$letter ($($_.VolumeName))" } else { $letter }
+    [PSCustomObject]@{
+        id      = $letter
+        label   = $label
+        freeGB  = $driveFreeGB
+        totalGB = $driveTotalGB
+    }
+})
+if ($drives.Count -eq 0) {
+    $drives = @([PSCustomObject]@{ id = $activeDrive; label = $activeDrive; freeGB = 0; totalGB = 0 })
+}
 
 [PSCustomObject]@{
     disk = [PSCustomObject]@{
-        totalGB     = $totalGB
-        freeGB      = $freeGB
-        usedGB      = $usedGB
+        drive     = $activeDrive
+        totalGB   = $totalGB
+        freeGB    = $freeGB
+        usedGB    = $usedGB
         percentFree = $pctFree
     }
     categories = $categoryList
+    drives = $drives
     scheduledTask = [PSCustomObject]@{
         enabled = $hasTask
+        name    = 'StorageOptimizerAutoClean'
     }
     system = [PSCustomObject]@{
-        cpu   = $cpu
-        ramGB = $ramGB
-        gpu   = $gpu
-        arch  = $arch
+        cpu     = $cpu
+        ramGB   = $ramGB
+        gpu     = $gpu
+        arch    = $arch
+        uptimeHours = $uptimeHours
     }
+    isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 } | ConvertTo-Json -Depth 5

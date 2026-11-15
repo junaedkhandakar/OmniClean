@@ -1,6 +1,6 @@
 # OmniClean
 
-Version: 1.0.5
+Version: 1.1.0
 Universal Windows Storage Optimizer and Performance Utility.
 
 OmniClean is a native, lightweight Windows desktop application engineered to inspect system drives, reclaim disk space from redundant caches, discover large or duplicate files, trim idle memory working sets, and optimize overall system responsiveness. It ships as a single standalone executable with zero external runtime dependencies (native edition), plus an optional local web edition.
@@ -14,7 +14,7 @@ OmniClean ships in two editions that share the same goals:
 
 The capabilities matrix below describes the native edition in full; the web edition's feature set, API and security model are documented in the [Web Edition](#web-edition) section.
 
-![OmniClean v1.0.5 dashboard](docs/screenshot.png)
+![OmniClean dashboard](docs/screenshot.png)
 
 ---
 
@@ -63,6 +63,7 @@ The capabilities matrix below describes the native edition in full; the web edit
 7. **Windows Startup Application Manager**
    - Reads configured auto-launch applications from the Windows Registry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`).
    - Interactive toggle switches: Click to toggle between ACTIVE (emerald badge) and DISABLED (slate badge) states to accelerate PC boot times.
+   - Disabling an entry parks it under `HKCU\Software\OmniClean\DisabledStartup` instead of deleting it, so it can be restored at any time. Machine-wide (HKLM) entries report clearly when Administrator rights are required.
 
 8. **Silent Background Automation**
    - Supports seamless integration with Windows Task Scheduler via native command line execution.
@@ -135,15 +136,12 @@ Execute `build.bat` from the root directory.
 
 ### Option 2: PowerShell Compilation
 
+`build.rsp` holds the compiler flags, so `build.bat`, the CI workflow and a
+manual build can never drift apart.
+
 ```powershell
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-$wpfDir = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF"
-
-& $csc /target:winexe /platform:anycpu /optimize+ /lib:"$wpfDir" `
-  /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll `
-  /r:System.Xaml.dll /r:System.dll /r:System.Core.dll `
-  /win32icon:"app.ico" /win32manifest:"app.manifest" `
-  /out:"OmniClean.exe" "OmniClean.cs" "OmniClean.Engine.cs" "OmniClean.Analysis.cs"
+& $csc "@build.rsp"
 ```
 
 ---
@@ -195,8 +193,11 @@ The engine logs to `server.log` next to `Launch.bat`.
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/status` | `GET` | Disk usage, category sizes, scheduler state, system info (cached ~20 s). |
-| `/api/clean` | `POST` | Body `{"categories": ["recycle_bin", ...]}` - runs `cleaner.ps1` and returns its log lines plus refreshed disk stats. |
+| `/api/clean` | `POST` | Body `{"categories": ["recycle_bin", ...], "dryRun": true, "drive": "C:"}` - runs `cleaner.ps1` and returns its log lines plus refreshed disk stats. **`dryRun` defaults to `true`**, so a cleanup never deletes unless the caller explicitly passes `"dryRun": false`. |
 | `/api/schedule` | `POST` | Body `{"enable": true}` or `{"enable": false}` - creates/removes a weekly Task Scheduler job (`StorageOptimizerAutoClean`, Sundays 12:00). |
+
+`/api/status` also accepts `?drive=C:` to report on a specific volume, and
+returns the list of local fixed drives for the drive picker.
 
 ### Security Model
 
@@ -205,10 +206,14 @@ The engine logs to `server.log` next to `Launch.bat`.
 - Category ids are validated against a fixed allowlist in `server.js` and executed via `execFile` (never through a shell), so request data can never become a shell command.
 - Static file serving resolves paths and refuses anything outside `public/`.
 - `cleaner.ps1` independently re-validates its `-Categories` input and supports `-DryRun`.
+- **Preview by default.** `POST /api/clean` treats `dryRun` as `true` unless the request explicitly says `false`, and the UI ships with *Preview only* switched on. A live run additionally requires an explicit confirmation dialog.
+- Request bodies are capped at 8 KB and category ids must match `^[a-z][a-z0-9_]*$`.
+- Static responses carry a strict Content-Security-Policy, `X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
+- Only cache folders are ever touched - browser profiles, cookies, bookmarks and saved passwords are never read or deleted.
 
 ### Testing
 
-`npm test` starts the server on a test port and verifies the API contract, the security boundaries above, and that `cleaner.ps1` receives comma-separated categories as separate ids (a regression here would silently disable all cleaning). The only cleaner invocations in tests use `-DryRun` or an invalid id, so the suite never deletes files.
+`npm test` starts the server on a test port and verifies the API contract, the security boundaries above, and that `cleaner.ps1` receives comma-separated categories as separate ids (a regression here would silently disable all cleaning). The suite also checks that the native `CURRENT_VERSION`, `package.json` and this README all state the same version, and that the category allowlist in `server.js` matches `targets.ps1`. The only cleaner invocations in tests use `-DryRun` or an invalid id, so the suite never deletes files.
 
 ---
 

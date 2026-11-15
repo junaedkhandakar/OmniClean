@@ -17,3 +17,4 @@ Desktop.ini
 
 # Node.js (web edition)
 node_modules/
+server.log

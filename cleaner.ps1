@@ -1,4 +1,4 @@
-﻿# cleaner.ps1 - Storage Optimizer cleanup engine.
+# cleaner.ps1 - Storage Optimizer cleanup engine.
 # Can be run silently on schedule, called on demand by server.js, or
 # executed manually with -DryRun to preview what would be removed.
 #
@@ -8,8 +8,10 @@
 # would fail. Splitting here is what makes the clean action actually work.
 
 param(
-    [string]$Categories = "recycle_bin,temp_files,nvidia_artifacts,capcut_old,vscode_cache,dev_cache,discord_cache",
-    [switch]$DryRun
+    [string]$Categories = "recycle_bin,temp_files,browser_cache,win_update,crash_dumps,nvidia_artifacts,capcut_old,vscode_cache,dev_cache,discord_cache",
+    [switch]$DryRun,
+    # Drive the drive-scoped targets (recycle bin) operate on.
+    [string]$Drive = 'C:'
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +21,8 @@ function Log([string]$msg) {
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     Write-Output "[$timestamp] $msg"
 }
+
+$activeDrive = Set-OmniCleanActiveDrive $Drive
 
 # --- Parse and validate requested categories (defense in depth:
 # server.js also allowlists these before the script is ever spawned) ---
@@ -36,10 +40,14 @@ if ($unknown.Count -gt 0) {
 }
 
 $mode = if ($DryRun) { "DRY RUN (no files will be deleted)" } else { "LIVE CLEAN" }
-Log "Starting Storage Optimization [$mode]..."
+Log "Starting Storage Optimization [$mode] on $activeDrive..."
 Log "Categories requested: $($requested -join ', ')"
 
-$beforeFree = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace
+$beforeFree = $null
+try {
+    $beforeFree = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$activeDrive'").FreeSpace
+} catch { $beforeFree = $null }
+
 $processed = 0
 $failed = 0
 
@@ -57,6 +65,9 @@ foreach ($id in $requested) {
         if ($DryRun) {
             $processed++
             Log "[DRY RUN] $($target.name): would clean up to $sizeMB MB"
+            foreach ($p in (Get-OmniCleanTargetPaths $target)) {
+                Log "[DRY RUN]   -> $p"
+            }
             continue
         }
 
@@ -84,10 +95,16 @@ if ($DryRun) {
     exit 0
 }
 
-$afterFree = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace
-$freedMB = [math]::Round([math]::Max(0, ($afterFree - $beforeFree)) / 1MB, 2)
-$currentFreeGB = [math]::Round($afterFree / 1GB, 2)
-Log "Optimization finished: $processed/$($requested.Count) categories processed, freed $freedMB MB. Current C: free space: $currentFreeGB GB."
+$freedMB = 0
+$currentFreeGB = 0
+try {
+    $afterFree = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$activeDrive'").FreeSpace
+    if ($beforeFree -ne $null -and $afterFree -ne $null) {
+        $freedMB = [math]::Round([math]::Max(0, ($afterFree - $beforeFree)) / 1MB, 2)
+    }
+    $currentFreeGB = [math]::Round($afterFree / 1GB, 2)
+} catch { }
+Log "Optimization finished: $processed/$($requested.Count) categories processed, freed $freedMB MB. Current ${activeDrive} free space: $currentFreeGB GB."
 
 if ($failed -gt 0) {
     Log "[ERROR] $failed category(ies) failed."

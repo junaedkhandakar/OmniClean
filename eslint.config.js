@@ -5,7 +5,7 @@ module.exports = [
     { ignores: ['node_modules/**'] },
     js.configs.recommended,
     {
-        files: ['server.js', 'eslint.config.js', 'test/**/*.js'],
+        files: ['server.js', 'eslint.config.js', 'test/**/*.js', 'tools/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',

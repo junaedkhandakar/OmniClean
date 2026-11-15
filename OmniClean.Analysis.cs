@@ -1,4 +1,4 @@
-﻿// OmniClean.Analysis.cs
+// OmniClean.Analysis.cs
 // Large-file profiler, SHA-256 duplicate finder, and startup optimizer.
 // Partial class compiled together with OmniClean.cs and OmniClean.Engine.cs.
 using System;
@@ -460,7 +460,78 @@ namespace OmniClean {
         }
 
         // ================= TAB 3: STARTUP APPS OPTIMIZER =================
+        const string HKCU_RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        const string HKLM_RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        // Disabled entries are parked here instead of being deleted, so
+        // toggling a program off never destroys its launch command.
+        const string DISABLED_KEY = @"Software\OmniClean\DisabledStartup";
+
+        // Reads the startup entries of one registry hive.
+        // IsMachine marks entries that need Administrator rights to change.
+        static void ReadStartupKey(RegistryKey root, bool isMachine, List<StartupAppItem> list) {
+            try {
+                using (var key = root.OpenSubKey(HKCU_RUN_KEY)) {
+                    if (key == null) return;
+                    foreach (var valName in key.GetValueNames()) {
+                        object raw = key.GetValue(valName);
+                        if (raw == null) continue;
+                        list.Add(new StartupAppItem {
+                            Name = valName,
+                            Command = raw.ToString(),
+                            IsEnabled = true,
+                            IsMachine = isMachine
+                        });
+                    }
+                }
+            } catch { }
+        }
+
+        // Parks a startup entry under OmniClean's own key so it can be
+        // restored later. Deleting the original value is what made the old
+        // toggle lose the command line forever.
+        static void ParkDisabledEntry(string name, string command, bool isMachine) {
+            try {
+                using (var key = Registry.CurrentUser.CreateSubKey(DISABLED_KEY)) {
+                    if (key == null) return;
+                    key.SetValue(name, command + "|||MACHINE");
+                }
+            } catch { }
+        }
+
+        static string[] TakeParkedEntry(string name) {
+            try {
+                using (var key = Registry.CurrentUser.OpenSubKey(DISABLED_KEY, true)) {
+                    if (key == null) return null;
+                    object raw = key.GetValue(name);
+                    if (raw == null) return null;
+                    key.DeleteValue(name, false);
+                    return raw.ToString().Split(new string[] { "|||MACHINE" }, StringSplitOptions.None);
+                }
+            } catch { return null; }
+        }
+
+        // Writes a startup value into the requested hive.
+        static void WriteStartupValue(string name, string command, bool isMachine) {
+            using (var key = (isMachine ? Registry.LocalMachine : Registry.CurrentUser).OpenSubKey(
+                isMachine ? HKLM_RUN_KEY : HKCU_RUN_KEY, true)) {
+                if (key == null) throw new InvalidOperationException(
+                    (isMachine ? "HKLM" : "HKCU") + " Run key is not writable.");
+                key.SetValue(name, command);
+            }
+        }
+
+        // Removes a startup value from the requested hive.
+        static void DeleteStartupValue(string name, bool isMachine) {
+            using (var key = (isMachine ? Registry.LocalMachine : Registry.CurrentUser).OpenSubKey(
+                isMachine ? HKLM_RUN_KEY : HKCU_RUN_KEY, true)) {
+                if (key == null) throw new InvalidOperationException(
+                    (isMachine ? "HKLM" : "HKCU") + " Run key is not writable.");
+                key.DeleteValue(name, false);
+            }
+        }
+
         static void ScanStartupAppsAsync() {
+
             btnScanStartup.IsEnabled = false;
             pnlStartupApps.Children.Clear();
             txtStartupSummary.Text = "Scanning Windows Registry startup entries...";
@@ -468,28 +539,20 @@ namespace OmniClean {
             Task.Run(new Action(() => {
                 var list = new List<StartupAppItem>();
 
-                try {
-                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
-                        if (key != null) {
-                            foreach (var valName in key.GetValueNames()) {
-                                list.Add(new StartupAppItem {
-                                    Name = valName,
-                                    Command = key.GetValue(valName).ToString(),
-                                    IsEnabled = true
-                                });
-                            }
-                        }
-                    }
-                } catch { }
+                // HKCU first, then HKLM (machine-wide entries need admin to
+                // toggle, which is surfaced in the UI instead of failing
+                // silently).
+                ReadStartupKey(Registry.CurrentUser, false, list);
+                ReadStartupKey(Registry.LocalMachine, true, list);
 
                 mainWindow.Dispatcher.Invoke(new Action(() => {
                     startupApps = list;
                     btnScanStartup.IsEnabled = true;
-                    txtStartupSummary.Text = string.Format("Found {0} active startup programs configured in user registry.", list.Count);
+                    txtStartupSummary.Text = string.Format("Found {0} startup programs configured in the Windows Registry.", list.Count);
 
                     if (list.Count == 0) {
                         TextBlock empty = new TextBlock();
-                        empty.Text = "No active startup applications found in user profile.";
+                        empty.Text = "No startup applications found in the registry.";
                         empty.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
                         empty.Margin = new Thickness(0, 20, 0, 0);
                         pnlStartupApps.Children.Add(empty);
@@ -550,29 +613,53 @@ namespace OmniClean {
 
                         StartupAppItem capturedApp = app;
                         btnToggle.Click += (s, e) => {
-                            capturedApp.IsEnabled = !capturedApp.IsEnabled;
                             if (capturedApp.IsEnabled) {
-                                btnToggle.Content = "● ACTIVE";
-                                btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x06, 0x4E, 0x3B));
-                                btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
-                                btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
+                                // Disable: park the entry under OmniClean's own
+                                // key so the launch command survives the toggle
+                                // and can be restored later.
                                 try {
-                                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                                        key.SetValue(capturedApp.Name, capturedApp.Command);
-                                    }
-                                    Log("Enabled startup app: " + capturedApp.Name);
-                                } catch (Exception ex) { Log("Toggle error: " + ex.Message); }
-                            } else {
-                                btnToggle.Content = "○ DISABLED";
-                                btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x29, 0x37));
-                                btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-                                btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51));
-                                try {
-                                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                                        key.DeleteValue(capturedApp.Name, false);
-                                    }
+                                    DeleteStartupValue(capturedApp.Name, capturedApp.IsMachine);
+                                    ParkDisabledEntry(capturedApp.Name, capturedApp.Command, capturedApp.IsMachine);
+                                    capturedApp.IsEnabled = false;
+                                    btnToggle.Content = "○ DISABLED";
+                                    btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x29, 0x37));
+                                    btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
+                                    btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51));
                                     Log("Disabled startup app: " + capturedApp.Name);
-                                } catch (Exception ex) { Log("Toggle error: " + ex.Message); }
+                                } catch (Exception ex) {
+                                    Log("Toggle error: " + ex.Message +
+                                        (capturedApp.IsMachine ? " (machine-wide entries require Administrator privileges)." : ""));
+                                    MessageBox.Show(mainWindow,
+                                        "Could not disable \"" + capturedApp.Name + "\".\n\n" + ex.Message +
+                                        (capturedApp.IsMachine ? "\n\nMachine-wide startup entries require Administrator privileges." : ""),
+                                        "OmniClean", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                }
+                            } else {
+                                // Enable: restore the parked command.
+                                try {
+                                    string[] parked = TakeParkedEntry(capturedApp.Name);
+                                    string command = parked != null && parked.Length > 0 ? parked[0] : capturedApp.Command;
+                                    bool machine = parked != null && parked.Length > 1
+                                        ? parked[1].Equals("MACHINE", StringComparison.OrdinalIgnoreCase)
+                                        : capturedApp.IsMachine;
+
+                                    WriteStartupValue(capturedApp.Name, command, machine);
+                                    capturedApp.Command = command;
+                                    capturedApp.IsMachine = machine;
+                                    capturedApp.IsEnabled = true;
+                                    btnToggle.Content = "● ACTIVE";
+                                    btnToggle.Background = new SolidColorBrush(Color.FromRgb(0x06, 0x4E, 0x3B));
+                                    btnToggle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
+                                    btnToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
+                                    Log("Enabled startup app: " + capturedApp.Name);
+                                } catch (Exception ex) {
+                                    Log("Toggle error: " + ex.Message +
+                                        (capturedApp.IsMachine ? " (machine-wide entries require Administrator privileges)." : ""));
+                                    MessageBox.Show(mainWindow,
+                                        "Could not enable \"" + capturedApp.Name + "\".\n\n" + ex.Message +
+                                        (capturedApp.IsMachine ? "\n\nMachine-wide startup entries require Administrator privileges." : ""),
+                                        "OmniClean", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                }
                             }
                         };
 

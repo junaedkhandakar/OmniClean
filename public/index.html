@@ -10,16 +10,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="ambient-glow glow-1"></div>
-    <div class="ambient-glow glow-2"></div>
-    <div class="ambient-glow glow-3"></div>
-
     <div class="app-container">
         <!-- Top Navigation -->
         <header class="app-header">
             <div class="brand">
                 <div class="brand-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
                 </div>
@@ -29,14 +25,18 @@
                 </div>
             </div>
 
-            <div class="system-pill">
-                <span class="status-dot"></span>
+            <div class="system-pill" id="system-pill" title="Detected hardware">
+                <span class="status-dot" id="status-dot" aria-hidden="true"></span>
                 <span id="system-pill-text">Detecting system...</span>
             </div>
 
             <div class="header-actions">
+                <label class="field-inline" for="drive-select">
+                    <span class="field-label">Drive</span>
+                    <select id="drive-select" class="select-control" aria-label="Drive to report on"></select>
+                </label>
                 <button id="btn-scan" class="btn-ghost" title="Rescan Storage">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                     </svg>
                     <span>Rescan</span>
@@ -47,16 +47,16 @@
         <!-- Main Grid Layout -->
         <main class="dashboard-grid">
             <!-- Left Panel: Storage Meter & Automation -->
-            <section class="panel-left">
+            <section class="panel-left" aria-label="Storage overview">
                 <!-- Disk Usage Card -->
                 <div class="glass-card disk-hero-card">
                     <div class="card-header">
-                        <h2>Drive (C:) Capacity</h2>
-                        <span class="pill-drive">NVMe SSD</span>
+                        <h2 id="drive-capacity-title">Drive Capacity</h2>
+                        <span class="pill-drive" id="drive-media-label">Local Disk</span>
                     </div>
 
                     <div class="gauge-container">
-                        <svg class="progress-ring" width="220" height="220" viewBox="0 0 220 220">
+                        <svg class="progress-ring" width="220" height="220" viewBox="0 0 220 220" role="img" aria-labelledby="gauge-percent">
                             <circle class="ring-track" cx="110" cy="110" r="92" />
                             <circle id="ring-fill" class="ring-fill" cx="110" cy="110" r="92" />
                         </svg>
@@ -87,7 +87,7 @@
                 <div class="glass-card automation-card">
                     <div class="automation-header">
                         <div class="icon-wrap-glow">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <circle cx="12" cy="12" r="10"/>
                                 <polyline points="12 6 12 12 16 14"/>
                             </svg>
@@ -97,7 +97,7 @@
                             <p>Runs silently in the background weekly</p>
                         </div>
                         <label class="switch">
-                            <input type="checkbox" id="toggle-schedule">
+                            <input type="checkbox" id="toggle-schedule" aria-label="Enable weekly auto-clean">
                             <span class="slider round"></span>
                         </label>
                     </div>
@@ -105,10 +105,25 @@
                         Schedule: <strong id="schedule-val">Checking...</strong>
                     </div>
                 </div>
+
+                <!-- Safety Card -->
+                <div class="glass-card safety-card">
+                    <div class="safety-row">
+                        <span class="safety-key">Mode</span>
+                        <span class="safety-value" id="safety-mode">Preview (dry run)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-key">Privileges</span>
+                        <span class="safety-value" id="safety-admin">Checking...</span>
+                    </div>
+                    <p class="safety-note" id="safety-note">
+                        Preview mode never deletes anything. Switch to a live run only when you are ready.
+                    </p>
+                </div>
             </section>
 
             <!-- Right Panel: Junk Categories & Clean Action -->
-            <section class="panel-right">
+            <section class="panel-right" aria-label="Cleanup targets">
                 <div class="glass-card categories-card">
                     <div class="categories-header">
                         <div>
@@ -116,13 +131,12 @@
                             <p class="subtitle">Select junk files and caches to safely delete</p>
                         </div>
                         <div class="quick-selection">
-                            <button id="btn-select-all" class="btn-subtle">Select All</button>
-                            <button id="btn-deselect-all" class="btn-subtle">Clear</button>
+                            <button id="btn-select-all" class="btn-subtle" type="button">Select All</button>
+                            <button id="btn-deselect-all" class="btn-subtle" type="button">Clear</button>
                         </div>
                     </div>
 
-                    <div id="category-list" class="category-list">
-                        <!-- Loaded dynamically -->
+                    <div id="category-list" class="category-list" role="group" aria-label="Cleanable categories">
                         <div class="loading-state">
                             <div class="spinner"></div>
                             <span>Scanning storage and caches...</span>
@@ -132,14 +146,21 @@
                     <div class="action-summary-bar">
                         <div class="summary-info">
                             <span class="summary-label">Selected to Reclaim:</span>
-                            <span id="selected-size-text" class="summary-size">0.00 MB</span>
+                            <span id="selected-size-text" class="summary-size">0.0 MB</span>
                         </div>
-                        <button id="btn-clean" class="btn-primary" disabled>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
-                            </svg>
-                            <span>Clean Selected Storage</span>
-                        </button>
+                        <div class="action-controls">
+                            <label class="switch switch-labeled" title="Preview the cleanup without deleting anything">
+                                <input type="checkbox" id="toggle-dryrun" checked>
+                                <span class="slider round"></span>
+                                <span class="switch-text">Preview only</span>
+                            </label>
+                            <button id="btn-clean" class="btn-primary" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
+                                </svg>
+                                <span>Preview Cleanup</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -147,21 +168,34 @@
                 <div class="glass-card console-card">
                     <div class="console-header">
                         <div class="console-title">
-                            <span class="console-dot"></span>
+                            <span class="console-dot" aria-hidden="true"></span>
                             <span>Operation Logs</span>
                         </div>
-                        <button id="btn-clear-console" class="btn-text">Clear Log</button>
+                        <button id="btn-clear-console" class="btn-text" type="button">Clear Log</button>
                     </div>
-                    <div id="console-output" class="console-output">
-                        <div class="log-line log-system">[Ready] Click "Clean Selected Storage" or toggle Auto-Clean.</div>
+                    <div id="console-output" class="console-output" role="log" aria-live="polite" aria-label="Operation log">
+                        <div class="log-line log-system">[Ready] Select targets, then run a preview cleanup.</div>
                     </div>
                 </div>
             </section>
         </main>
     </div>
 
+    <!-- Confirmation Dialog -->
+    <div id="confirm-overlay" class="overlay" hidden>
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+            <h3 id="confirm-title">Confirm cleanup</h3>
+            <p id="confirm-body"></p>
+            <ul id="confirm-list" class="confirm-list"></ul>
+            <div class="dialog-actions">
+                <button id="confirm-cancel" class="btn-subtle" type="button">Cancel</button>
+                <button id="confirm-accept" class="btn-primary btn-danger" type="button">Delete now</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
-    <div id="toast" class="toast"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="app.js"></script>
 </body>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -59,16 +59,23 @@ namespace OmniClean {
         public string Name { get; set; }
         public string Command { get; set; }
         public bool IsEnabled { get; set; }
+        // True when the entry lives in HKLM and therefore needs
+        // Administrator rights to toggle.
+        public bool IsMachine { get; set; }
         public Border CardRef { get; set; }
         public Button ToggleBtnRef { get; set; }
         public TextBlock StatusTextRef { get; set; }
     }
 
     partial class Program {
-        const string CURRENT_VERSION = "v1.0.5";
+        const string CURRENT_VERSION = "v1.1.0";
         const string REPO_URL = "https://github.com/Junaed93/OmniClean";
         const string RELEASES_API = "https://api.github.com/repos/Junaed93/OmniClean/releases/latest";
         const string TASK_NAME = "OmniCleanUniversalAutoClean";
+        // The web edition schedules the same maintenance job under a different
+        // name. Both are queried so the UI never shows "no schedule" while a
+        // job created by the other edition is actually running.
+        const string WEB_TASK_NAME = "StorageOptimizerAutoClean";
 
         [DllImport("Shell32.dll", CharSet = CharSet.Unicode)]
         static extern uint SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags);
@@ -1442,12 +1449,24 @@ namespace OmniClean {
         }
 
         static void Log(string msg) {
-            if (txtConsole == null) return;
+            // The console may not exist yet (headless --silent-clean) and the
+            // call may already be on the UI thread, where a Dispatcher.Invoke
+            // would deadlock.
+            if (txtConsole == null || mainWindow == null) return;
+            if (mainWindow.Dispatcher.CheckAccess()) {
+                AppendLogLine(msg);
+                return;
+            }
             mainWindow.Dispatcher.Invoke(new Action(() => {
-                string time = DateTime.Now.ToString("HH:mm:ss");
-                txtConsole.AppendText(string.Format("[{0}] {1}\r\n", time, msg));
-                txtConsole.ScrollToEnd();
+                AppendLogLine(msg);
             }));
+        }
+
+        static void AppendLogLine(string msg) {
+            if (txtConsole == null) return;
+            string time = DateTime.Now.ToString("HH:mm:ss");
+            txtConsole.AppendText(string.Format("[{0}] {1}\r\n", time, msg));
+            txtConsole.ScrollToEnd();
         }
 
         static void ExportLog() {
@@ -1781,6 +1800,10 @@ namespace OmniClean {
                 double totalGB = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
                 double freeGB = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                 double usedGB = totalGB - freeGB;
+
+                // A zero-byte or unreadable volume would divide by zero and
+                // produce NaN/Infinity in the UI.
+                if (totalGB <= 0) return;
                 double pctFree = (freeGB / totalGB) * 100.0;
 
                 txtDiskPercent.Text = string.Format("{0:F1}% Free", pctFree);
@@ -1789,23 +1812,32 @@ namespace OmniClean {
                 txtStatUsed.Text = string.Format("{0:F1} GB", usedGB);
                 txtStatTotal.Text = string.Format("{0:F1} GB", totalGB);
 
-                diskProgress.Value = (usedGB / totalGB) * 100.0;
+                double usedPct = (usedGB / totalGB) * 100.0;
+                diskProgress.Value = usedPct < 0 ? 0 : (usedPct > 100 ? 100 : usedPct);
             } catch { }
+        }
+
+        // Runs a schtasks query and reports whether the named task exists.
+        static bool ScheduledTaskExists(string taskName) {
+            try {
+                Process p = new Process();
+                p.StartInfo.FileName = "schtasks.exe";
+                p.StartInfo.Arguments = "/query /tn \"" + taskName + "\"";
+                p.StartInfo.CreateNoWindow = true;
+                p.StartInfo.UseShellExecute = false;
+                p.StartInfo.RedirectStandardOutput = true;
+                p.StartInfo.RedirectStandardError = true;
+                p.Start();
+                p.WaitForExit();
+                return p.ExitCode == 0;
+            } catch { return false; }
         }
 
         static void CheckScheduledTask() {
             Task.Run(new Action(() => {
-                bool hasTask = false;
-                try {
-                    Process p = new Process();
-                    p.StartInfo.FileName = "schtasks.exe";
-                    p.StartInfo.Arguments = "/query /tn \"" + TASK_NAME + "\"";
-                    p.StartInfo.CreateNoWindow = true;
-                    p.StartInfo.UseShellExecute = false;
-                    p.Start();
-                    p.WaitForExit();
-                    hasTask = (p.ExitCode == 0);
-                } catch { }
+                // Both editions schedule a weekly maintenance job under their
+                // own task name - either one means "a schedule is active".
+                bool hasTask = ScheduledTaskExists(TASK_NAME) || ScheduledTaskExists(WEB_TASK_NAME);
 
                 mainWindow.Dispatcher.Invoke(new Action(() => {
                     chkAutoClean.IsChecked = hasTask;
@@ -1829,8 +1861,19 @@ namespace OmniClean {
                     }
                     p.StartInfo.CreateNoWindow = true;
                     p.StartInfo.UseShellExecute = false;
+                    p.StartInfo.RedirectStandardOutput = true;
+                    p.StartInfo.RedirectStandardError = true;
                     p.Start();
                     p.WaitForExit();
+
+                    if (p.ExitCode != 0) {
+                        // schtasks failed (no permission, task missing, ...).
+                        // Report it instead of claiming success.
+                        mainWindow.Dispatcher.Invoke(new Action(() => {
+                            Log((enable ? "Failed to schedule" : "Failed to remove") + " the auto-clean task (schtasks exit code " + p.ExitCode + ").");
+                        }));
+                        return;
+                    }
 
                     mainWindow.Dispatcher.Invoke(new Action(() => {
                         txtScheduleStatus.Text = enable ? "Status: Active (Every Sunday at 12:00 PM)" : "Status: Disabled";

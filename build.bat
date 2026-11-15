@@ -1,5 +1,8 @@
 @echo off
+setlocal
 title Build OmniClean
+cd /d "%~dp0"
+
 echo ==============================================
 echo Building OmniClean Standalone Native Executable
 echo ==============================================
@@ -8,19 +11,41 @@ set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 set WPF_DIR=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF
 
 if not exist "%CSC%" (
-    echo Error: C# compiler not found at %CSC%
-    pause
+    echo [ERROR] C# compiler not found at %CSC%
+    exit /b 1
+)
+if not exist "%WPF_DIR%" (
+    echo [ERROR] WPF reference assemblies not found at %WPF_DIR%
     exit /b 1
 )
 
-"%CSC%" /target:winexe /platform:anycpu /optimize+ /lib:"%WPF_DIR%" /r:PresentationFramework.dll /r:PresentationCore.dll /r:WindowsBase.dll /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /win32icon:"app.ico" /win32manifest:"app.manifest" /out:"OmniClean.exe" "OmniClean.cs" "OmniClean.Engine.cs" "OmniClean.Analysis.cs"
+rem The response file keeps the compiler flags in one place, so build.bat,
+rem CI and a manual build can never drift apart.
+"%CSC%" @build.rsp
+set BUILD_EXIT=%errorlevel%
 
-if %errorlevel% equ 0 (
+if %BUILD_EXIT% neq 0 (
     echo.
-    echo [SUCCESS] OmniClean.exe built successfully!
-) else (
-    echo.
-    echo [ERROR] Build failed.
+    echo [ERROR] Build failed with exit code %BUILD_EXIT%.
+    exit /b %BUILD_EXIT%
 )
 
-pause
+if not exist "OmniClean.exe" (
+    echo.
+    echo [ERROR] Build reported success but OmniClean.exe was not created.
+    exit /b 1
+)
+
+echo.
+echo [SUCCESS] OmniClean.exe built successfully!
+
+rem Validate the embedded XAML so a broken UI never ships.
+"OmniClean.exe" --validate-xaml
+if errorlevel 1 (
+    echo [ERROR] Embedded XAML validation failed. See xaml-validation.log
+    exit /b 1
+)
+echo [SUCCESS] Embedded XAML validated.
+
+endlocal
+exit /b 0

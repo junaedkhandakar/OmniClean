@@ -1,3 +1,5 @@
+'use strict';
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +16,9 @@ const TASK_NAME = 'StorageOptimizerAutoClean';
 const CATEGORIES = Object.freeze([
     'recycle_bin',
     'temp_files',
+    'browser_cache',
+    'win_update',
+    'crash_dumps',
     'nvidia_artifacts',
     'capcut_old',
     'vscode_cache',
@@ -22,6 +27,7 @@ const CATEGORIES = Object.freeze([
 ]);
 
 const CATEGORY_ID_RE = /^[a-z][a-z0-9_]*$/;
+const DRIVE_RE = /^[A-Za-z]:$/;
 
 // This server binds to loopback only and is reachable from the user's own
 // browser. Requests carrying a foreign Host (DNS-rebinding) or a foreign
@@ -31,10 +37,13 @@ const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:
 const ALLOWED_ORIGINS = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`]);
 
 const STATUS_TTL_MS = 20_000;
-const SCAN_TIMEOUT_MS = 120_000;
-const CLEAN_TIMEOUT_MS = 600_000;
+const SCAN_TIMEOUT_MS = 180_000;
+const CLEAN_TIMEOUT_MS = 900_000;
 const SCHEDULE_TIMEOUT_MS = 30_000;
 const MAX_BODY_BYTES = 8 * 1024;
+// Hard ceiling: a body this large is not a legitimate request, so the
+// socket is torn down instead of being drained any further.
+const MAX_DRAIN_BYTES = 16 * 1024;
 
 // ---- helpers -------------------------------------------------------------
 
@@ -97,59 +106,69 @@ function sendJson(res, status, obj) {
 function readBody(req) {
     return new Promise((resolve, reject) => {
         let size = 0;
+        let rejected = false;
         const chunks = [];
         req.on('data', (chunk) => {
+            if (rejected) {
+                // Oversized payload: drain a bounded amount so the client
+                // can finish its write, then stop listening entirely.
+                size += chunk.length;
+                if (size > MAX_DRAIN_BYTES) {
+                    req.destroy();
+                }
+                return;
+            }
             size += chunk.length;
             if (size > MAX_BODY_BYTES) {
+                rejected = true;
                 const err = new Error('Request body too large');
                 err.statusCode = 413;
                 reject(err);
-                req.destroy();
+                // Stop reading but keep the connection long enough to deliver
+                // the 413 response instead of resetting the socket.
+                req.pause();
                 return;
             }
             chunks.push(chunk);
         });
-        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-        req.on('error', reject);
+        req.on('end', () => {
+            if (!rejected) resolve(Buffer.concat(chunks).toString('utf8'));
+        });
+        req.on('error', (err) => {
+            if (!rejected) reject(err);
+        });
     });
 }
 
 // Run scan.ps1 and cache the parsed result briefly so the UI's repeated
 // status calls do not trigger a full recursive disk scan every time.
-let statusCache = { ts: 0, data: null };
-let statusInflight = null;
-
-async function scanStatus(forceFresh = false) {
-    const now = Date.now();
-    if (!forceFresh && statusCache.data && now - statusCache.ts < STATUS_TTL_MS) {
-        return statusCache.data;
-    }
-    if (statusInflight) return statusInflight;
-
-    statusInflight = (async () => {
-        const result = await runPowerShell(SCAN_SCRIPT, [], SCAN_TIMEOUT_MS);
-        if (!result.success || !result.output) {
-            throw new Error(result.error || 'Scan produced no output');
-        }
-        let data;
-        try {
-            data = JSON.parse(result.output);
-        } catch {
-            throw new Error('Scan produced invalid JSON');
-        }
-        statusCache = { ts: Date.now(), data };
-        return data;
-    })();
-
-    try {
-        return await statusInflight;
-    } finally {
-        statusInflight = null;
-    }
-}
+let statusCache = new Map();
 
 function invalidateStatusCache() {
-    statusCache = { ts: 0, data: null };
+    statusCache.clear();
+}
+
+async function scanStatus(drive, forceFresh = false) {
+    const key = drive || 'C:';
+    const now = Date.now();
+    const cached = statusCache.get(key);
+    if (!forceFresh && cached && now - cached.ts < STATUS_TTL_MS) {
+        return cached.data;
+    }
+
+    const args = drive ? ['-Drive', drive] : [];
+    const result = await runPowerShell(SCAN_SCRIPT, args, SCAN_TIMEOUT_MS);
+    if (!result.success || !result.output) {
+        throw new Error(result.error || 'Scan produced no output');
+    }
+    let data;
+    try {
+        data = JSON.parse(result.output);
+    } catch {
+        throw new Error('Scan produced invalid JSON');
+    }
+    statusCache.set(key, { ts: Date.now(), data });
+    return data;
 }
 
 // ---- request handling ----------------------------------------------------
@@ -191,8 +210,13 @@ async function handleRequest(req, res) {
 
     // 3. API: Status
     if (url.pathname === '/api/status' && req.method === 'GET') {
+        const drive = url.searchParams.get('drive');
+        if (drive !== null && !DRIVE_RE.test(drive)) {
+            sendJson(res, 400, { error: 'Invalid drive parameter' });
+            return;
+        }
         try {
-            const data = await scanStatus();
+            const data = await scanStatus(drive);
             sendJson(res, 200, data);
         } catch (err) {
             sendJson(res, 500, { error: err.message });
@@ -223,6 +247,14 @@ async function handleRequest(req, res) {
             return;
         }
 
+        // Dry run is opt-in and defaults to ON: a cleanup must never delete
+        // anything unless the caller explicitly asked for a live run.
+        const dryRun = data.dryRun !== false;
+
+        const drive = typeof data.drive === 'string' && DRIVE_RE.test(data.drive)
+            ? data.drive.toUpperCase()
+            : 'C:';
+
         if (cleanInProgress) {
             sendJson(res, 409, { error: 'A cleanup is already running' });
             return;
@@ -230,17 +262,27 @@ async function handleRequest(req, res) {
 
         cleanInProgress = true;
         try {
-            const cleanResult = await runPowerShell(CLEANER_SCRIPT, ['-Categories', categories.join(',')], CLEAN_TIMEOUT_MS);
+            const args = ['-Categories', categories.join(','), '-Drive', drive];
+            if (dryRun) args.push('-DryRun');
+
+            const cleanResult = await runPowerShell(CLEANER_SCRIPT, args, CLEAN_TIMEOUT_MS);
             invalidateStatusCache();
+
             let disk = {};
             try {
-                const scanData = await scanStatus(true);
+                const scanData = await scanStatus(drive, true);
                 disk = scanData.disk || {};
             } catch { /* keep previous disk values */ }
 
+            const logs = cleanResult.output
+                .split(/\r?\n/)
+                .map((l) => l.trim())
+                .filter((l) => l !== '');
+
             sendJson(res, 200, {
-                success: cleanResult.success,
-                logs: cleanResult.output.split(/\r?\n/).filter((l) => l.trim() !== ''),
+                success: cleanResult.success && cleanResult.code === 0,
+                dryRun,
+                logs,
                 error: cleanResult.success ? undefined : (cleanResult.error || 'Cleanup script reported an error'),
                 disk
             });
@@ -325,7 +367,8 @@ async function handleRequest(req, res) {
             'Content-Type': contentType,
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'",
+            'X-Frame-Options': 'DENY',
+            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
             'Cache-Control': 'no-store'
         });
         res.end(req.method === 'HEAD' ? undefined : content);
