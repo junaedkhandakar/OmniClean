@@ -87,6 +87,20 @@ namespace OmniClean {
             return bytes / (1024.0 * 1024.0);
         }
 
+        // Size of a single file in MB. Used for the "icons_only" cleanup
+        // mode, where only the thumbnail / icon cache database files inside a
+        // folder are removed - the folder itself holds much more.
+        static double GetFileSizeMB(string path) {
+            if (string.IsNullOrEmpty(path)) return 0;
+            try {
+                var fi = new FileInfo(path);
+                if (!fi.Exists) return 0;
+                return fi.Length / (1024.0 * 1024.0);
+            } catch {
+                return 0;
+            }
+        }
+
         // CapCut installs each build in a version-named folder ("2.9.1").
         // A plain string sort is wrong here: "2.10.0" sorts BEFORE "2.9.1",
         // which would make the cleanup delete the newest build and keep an
@@ -139,51 +153,10 @@ namespace OmniClean {
             return outdated;
         }
 
-        static List<string> GetBrowserCachePaths(string localApp, string appData) {
-            var paths = new List<string>();
+        // The browser and GPU cache resolvers now live in OmniClean.Resolvers.cs
+        // so they can follow the shared taxonomy and cover every browser and
+        // graphics vendor, not just a fixed list.
 
-            // Chromium based (Chrome, Edge, Brave): scan all user profiles (Default, Profile 1, etc.)
-            string[] chromiumUsers = new string[] {
-                Path.Combine(localApp, @"Google\Chrome\User Data"),
-                Path.Combine(localApp, @"Microsoft\Edge\User Data"),
-                Path.Combine(localApp, @"BraveSoftware\Brave-Browser\User Data")
-            };
-            foreach (var uDir in chromiumUsers) {
-                if (!Directory.Exists(uDir)) continue;
-                try {
-                    foreach (var pDir in Directory.GetDirectories(uDir)) {
-                        string name = Path.GetFileName(pDir);
-                        if (name.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Profile ", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Guest", StringComparison.OrdinalIgnoreCase)) {
-                            paths.Add(Path.Combine(pDir, "Cache"));
-                            paths.Add(Path.Combine(pDir, "Code Cache"));
-                            paths.Add(Path.Combine(pDir, "GPUCache"));
-                        }
-                    }
-                } catch { }
-            }
-
-            // Opera and Opera GX
-            paths.Add(Path.Combine(localApp, @"Opera Software\Opera Stable\Cache"));
-            paths.Add(Path.Combine(localApp, @"Opera Software\Opera GX Stable\Cache"));
-            paths.Add(Path.Combine(appData, @"Opera Software\Opera Stable\GPUCache"));
-            paths.Add(Path.Combine(appData, @"Opera Software\Opera GX Stable\GPUCache"));
-
-            // Firefox
-            string ffProfiles = Path.Combine(localApp, @"Mozilla\Firefox\Profiles");
-            if (Directory.Exists(ffProfiles)) {
-                try {
-                    foreach (var p in Directory.GetDirectories(ffProfiles)) {
-                        paths.Add(Path.Combine(p, "cache2"));
-                        paths.Add(Path.Combine(p, "startupCache"));
-                        paths.Add(Path.Combine(p, "jumpListCache"));
-                    }
-                } catch { }
-            }
-
-            return paths;
-        }
 
         static void RunScanAsync() {
             if (isScanning || isCleaning) return;
@@ -212,7 +185,9 @@ namespace OmniClean {
                         bool installed = true;
 
                         try {
-                            if (cat.Id == "recycle_bin") {
+                            CleanupTarget target = FindTaxonomyTarget(cat.Id);
+
+                            if (target != null && target.Kind == "recycle") {
                                 size = 0;
                                 try {
                                     SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
@@ -224,59 +199,29 @@ namespace OmniClean {
                                         size = GetDirectorySizeMB(selectedDriveLetter + @":\$Recycle.Bin");
                                     }
                                 } catch { }
-                            } else if (cat.Id == "temp_files") {
-                                size += GetDirectorySizeMB(Path.GetTempPath());
-                                size += GetDirectorySizeMB(Path.Combine(winDir, "Temp"));
-                            } else if (cat.Id == "browser_cache") {
-                                foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
-                                    size += GetDirectorySizeMB(bPath);
-                                }
-                            } else if (cat.Id == "win_update") {
-                                size = GetDirectorySizeMB(Path.Combine(winDir, @"SoftwareDistribution\Download"));
-                            } else if (cat.Id == "crash_dumps") {
-                                size += GetDirectorySizeMB(Path.Combine(localApp, "CrashDumps"));
-                                size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"));
-                                size += GetDirectorySizeMB(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"));
-                            } else if (cat.Id == "empty_folders") {
+                            } else if (target != null && target.Kind == "empty_dirs") {
                                 size = 0.5;
-                            } else if (cat.Id == "nvidia_artifacts") {
-                                string ota = Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts");
-                                if (Directory.Exists(ota)) {
-                                    size = GetDirectorySizeMB(ota);
-                                } else {
+                            } else {
+                                // Every remaining target kind resolves to a set
+                                // of folders. A target counts as "not detected"
+                                // when none of its folders exist on this
+                                // machine - that is how a category that does
+                                // not apply here (an AMD cache on an Intel
+                                // laptop) is reported honestly.
+                                var targetPaths = ResolveTargetPaths(target);
+                                if (targetPaths.Count == 0) {
                                     installed = false;
-                                }
-                            } else if (cat.Id == "capcut_old") {
-                                if (!Directory.Exists(Path.Combine(localApp, @"CapCut\Apps"))) {
-                                    installed = false;
                                 } else {
-                                    foreach (var old in GetCapCutOldVersionPaths(localApp)) {
-                                        size += GetDirectorySizeMB(old);
+                                    string mode = GetCleanupMode(target);
+                                    foreach (var p in targetPaths) {
+                                        if (mode == "icons_only") {
+                                            foreach (var f in GetIconCacheFiles(p)) {
+                                                size += GetFileSizeMB(f);
+                                            }
+                                        } else {
+                                            size += GetDirectorySizeMB(p);
+                                        }
                                     }
-                                }
-                            } else if (cat.Id == "vscode_cache") {
-                                string vscPath = Path.Combine(appData, "Code");
-                                if (Directory.Exists(vscPath)) {
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedExtensionVSIXs"));
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, @"Crashpad\reports"));
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "CachedData"));
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "Cache"));
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "Code Cache"));
-                                    size += GetDirectorySizeMB(Path.Combine(vscPath, "GPUCache"));
-                                } else {
-                                    installed = false;
-                                }
-                            } else if (cat.Id == "dev_cache") {
-                                size += GetDirectorySizeMB(Path.Combine(localApp, "npm-cache"));
-                                size += GetDirectorySizeMB(Path.Combine(localApp, @"pip\cache"));
-                            } else if (cat.Id == "discord_cache") {
-                                string dsc = Path.Combine(appData, "discord");
-                                if (Directory.Exists(dsc)) {
-                                    size += GetDirectorySizeMB(Path.Combine(dsc, "Cache"));
-                                    size += GetDirectorySizeMB(Path.Combine(dsc, "Code Cache"));
-                                    size += GetDirectorySizeMB(Path.Combine(dsc, "GPUCache"));
-                                } else {
-                                    installed = false;
                                 }
                             }
                         } catch { }
@@ -367,7 +312,9 @@ namespace OmniClean {
                         Log((isDryRun ? "[Simulate] " : "[Purging] ") + cat.Name);
 
                         try {
-                            if (cat.Id == "recycle_bin") {
+                            CleanupTarget target = FindTaxonomyTarget(cat.Id);
+
+                            if (target != null && target.Kind == "recycle") {
                                 if (!isDryRun) {
                                     SHQUERYRBINFO rbInfo = new SHQUERYRBINFO();
                                     rbInfo.cbSize = Marshal.SizeOf(typeof(SHQUERYRBINFO));
@@ -389,22 +336,11 @@ namespace OmniClean {
                                 } else {
                                     Manifest("[PREVIEW] Recycle Bin on drive " + selectedDriveLetter + ":");
                                 }
-                            } else if (cat.Id == "temp_files") {
-                                CleanFolder(Path.GetTempPath(), isDryRun);
-                                CleanFolder(Path.Combine(winDir, "Temp"), isDryRun);
-                            } else if (cat.Id == "browser_cache") {
+                            } else if (target != null && target.Kind == "browser_cache") {
                                 CleanBrowserCaches(isDryRun);
-                            } else if (cat.Id == "win_update") {
-                                CleanFolder(Path.Combine(winDir, @"SoftwareDistribution\Download"), isDryRun);
-                            } else if (cat.Id == "crash_dumps") {
-                                CleanFolder(Path.Combine(localApp, "CrashDumps"), isDryRun);
-                                CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportQueue"), isDryRun);
-                                CleanFolder(Path.Combine(progData, @"Microsoft\Windows\WER\ReportArchive"), isDryRun);
-                            } else if (cat.Id == "empty_folders") {
+                            } else if (target != null && target.Kind == "empty_dirs") {
                                 CleanEmptyDirectories(Path.GetTempPath(), isDryRun);
-                            } else if (cat.Id == "nvidia_artifacts") {
-                                CleanFolder(Path.Combine(progData, @"NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts"), isDryRun);
-                            } else if (cat.Id == "capcut_old") {
+                            } else if (target != null && target.Kind == "capcut_old") {
                                 foreach (var d in GetCapCutOldVersionPaths(localApp)) {
                                     try {
                                         if (!isDryRun) {
@@ -418,22 +354,15 @@ namespace OmniClean {
                                         Manifest("[FAILED]  " + d + " -- " + ex.Message);
                                     }
                                 }
-                            } else if (cat.Id == "vscode_cache") {
-                                string vscPath = Path.Combine(appData, "Code");
-                                CleanFolder(Path.Combine(vscPath, "CachedExtensionVSIXs"), isDryRun);
-                                CleanFolder(Path.Combine(vscPath, @"Crashpad\reports"), isDryRun);
-                                CleanFolder(Path.Combine(vscPath, "CachedData"), isDryRun);
-                                CleanFolder(Path.Combine(vscPath, "Cache"), isDryRun);
-                                CleanFolder(Path.Combine(vscPath, "Code Cache"), isDryRun);
-                                CleanFolder(Path.Combine(vscPath, "GPUCache"), isDryRun);
-                            } else if (cat.Id == "dev_cache") {
-                                CleanFolder(Path.Combine(localApp, "npm-cache"), isDryRun);
-                                CleanFolder(Path.Combine(localApp, @"pip\cache"), isDryRun);
-                            } else if (cat.Id == "discord_cache") {
-                                string dsc = Path.Combine(appData, "discord");
-                                CleanFolder(Path.Combine(dsc, "Cache"), isDryRun);
-                                CleanFolder(Path.Combine(dsc, "Code Cache"), isDryRun);
-                                CleanFolder(Path.Combine(dsc, "GPUCache"), isDryRun);
+                            } else {
+                                // Everything else is a "paths" or "gpu_cache"
+                                // target: resolve the folders the taxonomy
+                                // declares and clear them. Adding a new
+                                // category to targets.json therefore needs
+                                // no code change here.
+                                foreach (string path in ResolveTargetPaths(target)) {
+                                    CleanFolder(path, isDryRun);
+                                }
                             }
                         } catch (Exception ex) {
                             Log("Warning: " + ex.Message);
@@ -552,9 +481,7 @@ namespace OmniClean {
         }
 
         static void CleanBrowserCaches(bool isDryRun) {
-            string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            foreach (var bPath in GetBrowserCachePaths(localApp, appData)) {
+            foreach (var bPath in GetBrowserCachePaths()) {
                 CleanFolder(bPath, isDryRun);
             }
         }

@@ -1,0 +1,558 @@
+{
+  "$comment": "OmniClean cleanup taxonomy - the single source of truth for both editions. The web engine (targets.ps1) and the native engine (OmniClean.Engine.cs / OmniClean.Resolvers.cs) both read this list, so a category can never exist on one side only. test/smoke.test.js asserts both editions stay in sync.",
+  "$kinds": {
+    "paths": "Explicit folder or file list. Wildcards: '*' matches inside one path segment, '**' matches any number of segments.",
+    "glob": "Discovery by pattern. roots[].base is a folder, roots[].patterns are relative patterns ('*' = one segment, '**' = any depth).",
+    "recycle": "The Recycle Bin of the active drive.",
+    "empty_dirs": "Empty directories below the temp roots.",
+    "browser_cache": "Every installed browser (Chromium, Gecko, Opera, Vivaldi, Arc, WebView2) - discovered, not hard-coded.",
+    "gpu_cache": "Graphics caches of every vendor - discovered, not hard-coded.",
+    "old_app_versions": "Versioned application builds; every root except the newest build is pruned.",
+    "editor_cache": "Caches of installed code editors (VS Code, Cursor, Insiders, ...)."
+  },
+  "$cleanupModes": {
+    "contents": "Delete everything inside the resolved folder (default).",
+    "icons_only": "Delete only the thumbnail / icon cache database files inside the resolved folder."
+  },
+  "$flags": {
+    "requires_admin": "The target usually needs Administrator rights to be cleaned.",
+    "opt_in": "The target is not selected automatically. It can contain data that has to be downloaded again, so the user has to pick it explicitly."
+  },
+  "version": 2,
+  "groups": [
+    {
+      "id": "system",
+      "name": "System & Operating System",
+      "icon": "🖥️",
+      "targets": [
+        {
+          "id": "recycle_bin",
+          "name": "Recycle Bin",
+          "desc": "Deleted files waiting to be purged",
+          "kind": "recycle"
+        },
+        {
+          "id": "temp_files",
+          "name": "Temporary System & User Files",
+          "desc": "Windows and application temp files",
+          "kind": "paths",
+          "paths": ["%TEMP%", "%WINDIR%\\Temp", "%LOCALAPPDATA%\\Temp", "%WINDIR%\\Prefetch"]
+        },
+        {
+          "id": "win_update",
+          "name": "Windows Update Downloads",
+          "desc": "Stale update payloads left after patching",
+          "kind": "paths",
+          "requires_admin": true,
+          "paths": ["%WINDIR%\\SoftwareDistribution\\Download", "%WINDIR%\\SoftwareDistribution\\DeliveryOptimization\\Cache"]
+        },
+        {
+          "id": "win_delivery_opt",
+          "name": "Delivery Optimization Cache",
+          "desc": "Peer-to-peer update cache used by Windows Update",
+          "kind": "paths",
+          "requires_admin": true,
+          "paths": ["%WINDIR%\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Cache"]
+        },
+        {
+          "id": "win_logs",
+          "name": "Windows Diagnostic & Event Logs",
+          "desc": "Old CBS, DISM, setup and memory dump artifacts",
+          "kind": "paths",
+          "requires_admin": true,
+          "paths": [
+            "%WINDIR%\\Logs\\CBS",
+            "%WINDIR%\\Logs\\DISM",
+            "%WINDIR%\\Logs\\WindowsUpdate",
+            "%WINDIR%\\Panther",
+            "%WINDIR%\\Minidump",
+            "%WINDIR%\\MEMORY.DMP"
+          ]
+        },
+        {
+          "id": "crash_dumps",
+          "name": "Crash Dumps & Error Reports",
+          "desc": "User crash dumps and the Windows Error Reporting queue",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\CrashDumps",
+            "%PROGRAMDATA%\\Microsoft\\Windows\\WER\\ReportQueue",
+            "%PROGRAMDATA%\\Microsoft\\Windows\\WER\\ReportArchive",
+            "%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\ReportArchive"
+          ]
+        },
+        {
+          "id": "thumbnails",
+          "name": "Thumbnail & Icon Cache",
+          "desc": "Cached image thumbnails and shell icons (database files only)",
+          "kind": "paths",
+          "cleanup": "icons_only",
+          "paths": [
+            "%LOCALAPPDATA%\\Microsoft\\Windows\\Explorer",
+            "%LOCALAPPDATA%\\Microsoft\\Windows\\IconCache",
+            "%LOCALAPPDATA%\\IconCache.db"
+          ]
+        },
+        {
+          "id": "font_cache",
+          "name": "Font Cache",
+          "desc": "Cached font data rebuilt automatically by Windows",
+          "kind": "paths",
+          "paths": ["%WINDIR%\\ServiceProfiles\\LocalService\\AppData\\Local\\FontCache", "%LOCALAPPDATA%\\Microsoft\\Windows\\FontCache"]
+        },
+        {
+          "id": "defender_cache",
+          "name": "Windows Defender Quarantine",
+          "desc": "Files Defender has already quarantined and blocked",
+          "kind": "paths",
+          "requires_admin": true,
+          "paths": ["%PROGRAMDATA%\\Microsoft\\Windows Defender\\Quarantine"]
+        },
+        {
+          "id": "store_app_cache",
+          "name": "Microsoft Store App Temp State",
+          "desc": "Temporary state folders of every installed Store / UWP app",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\Packages",
+              "patterns": ["*/TempState", "*/AC/TempState"]
+            }
+          ]
+        },
+        {
+          "id": "store_app_local_cache",
+          "name": "Microsoft Store App Local Cache",
+          "desc": "LocalCache of every installed Store / UWP app - a few apps keep game data here, so it is a separate opt-in",
+          "kind": "glob",
+          "opt_in": true,
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\Packages",
+              "patterns": ["*/LocalCache"]
+            }
+          ]
+        },
+        {
+          "id": "empty_folders",
+          "name": "Empty Temporary Directories",
+          "desc": "Abandoned 0-byte folders left by uninstalled apps",
+          "kind": "empty_dirs"
+        }
+      ]
+    },
+    {
+      "id": "graphics",
+      "name": "Graphics, GPU & Shader Caches",
+      "icon": "🎮",
+      "targets": [
+        {
+          "id": "directx_cache",
+          "name": "DirectX & D3D Bytecode Cache",
+          "desc": "Windows-wide DirectX pipeline and D3D bytecode cache",
+          "kind": "paths",
+          "paths": ["%LOCALAPPDATA%\\D3DSCache"]
+        },
+        {
+          "id": "nvidia_artifacts",
+          "name": "NVIDIA Driver & Shader Cache",
+          "desc": "NVIDIA driver downloads, OTA artifacts and shader caches",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\NVIDIA\\DXCache",
+            "%LOCALAPPDATA%\\NVIDIA\\GLCache",
+            "%LOCALAPPDATA%\\NVIDIA\\ComputeCache",
+            "%PROGRAMDATA%\\NVIDIA Corporation\\NV_Cache",
+            "%PROGRAMDATA%\\NVIDIA Corporation\\NVIDIA app\\UpdateFramework\\ota-artifacts",
+            "%PROGRAMDATA%\\NVIDIA Corporation\\Downloader"
+          ]
+        },
+        {
+          "id": "amd_artifacts",
+          "name": "AMD Driver & Shader Cache",
+          "desc": "AMD Adrenalin downloads, installer payloads and shader caches",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\AMD\\DxCache",
+            "%LOCALAPPDATA%\\AMD\\GLCache",
+            "%LOCALAPPDATA%\\AMD\\CnCache",
+            "%LOCALAPPDATA%\\AMD\\DxcCache",
+            "%LOCALAPPDATA%\\AMD\\VkCache",
+            "%PROGRAMDATA%\\AMD\\CN",
+            "%PROGRAMDATA%\\AMD\\PPCache",
+            "%PROGRAMDATA%\\AMD\\Download"
+          ]
+        },
+        {
+          "id": "intel_artifacts",
+          "name": "Intel Graphics & Shader Cache",
+          "desc": "Intel Arc, Iris and UHD driver downloads and shader caches",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\Intel\\D3DSCache",
+            "%LOCALAPPDATA%\\Intel\\GLCache",
+            "%LOCALAPPDATA%\\Intel\\ShaderCache",
+            "%LOCALAPPDATA%\\Intel\\DXCache",
+            "%PROGRAMDATA%\\Intel\\DisplayCache",
+            "%PROGRAMDATA%\\Intel\\Download"
+          ]
+        },
+        {
+          "id": "vulkan_cache",
+          "name": "Vulkan, OpenGL & Mesa Cache",
+          "desc": "Software rasterizer pipelines used by VMs and Linux tooling",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\VulkanCache",
+            "%LOCALAPPDATA%\\OpenGLShaderCache",
+            "%LOCALAPPDATA%\\Mesa\\shader_cache",
+            "%LOCALAPPDATA%\\mesa_shader_cache",
+            "%LOCALAPPDATA%\\wine\\d3dcache"
+          ]
+        },
+        {
+          "id": "steam_shader_cache",
+          "name": "Steam Shader Pre-Cache",
+          "desc": "Pre-cached shaders from the Steam library",
+          "kind": "paths",
+          "paths": ["%LOCALAPPDATA%\\Steam\\shadercache", "%PROGRAMDATA%\\Steam\\shadercache"]
+        },
+        {
+          "id": "gpu_shader_cache",
+          "name": "Discovered Graphics Caches (Any Vendor)",
+          "desc": "Every graphics cache found on this machine that no other target owns - including vendors OmniClean does not know by name",
+          "kind": "gpu_cache"
+        }
+      ]
+    },
+    {
+      "id": "browsers",
+      "name": "Browsers & Internet Apps",
+      "icon": "🌐",
+      "targets": [
+        {
+          "id": "browser_cache",
+          "name": "Browser Caches & Shaders",
+          "desc": "Every installed Chromium, Gecko, Opera, Vivaldi, Arc and WebView2 browser - discovered on this machine",
+          "kind": "browser_cache"
+        },
+        {
+          "id": "browser_service_worker",
+          "name": "Browser Service Worker Cache",
+          "desc": "Offline web app data of every Chromium profile",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+              "patterns": ["*/Service Worker/CacheStorage"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data",
+              "patterns": ["*/Service Worker/CacheStorage"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data",
+              "patterns": ["*/Service Worker/CacheStorage"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\Vivaldi\\User Data",
+              "patterns": ["*/Service Worker/CacheStorage"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\Arc\\User Data",
+              "patterns": ["*/Service Worker/CacheStorage"]
+            }
+          ]
+        },
+        {
+          "id": "browser_downloads_meta",
+          "name": "Browser Download Metadata",
+          "desc": "Partial download fragments left by interrupted transfers",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+              "patterns": ["*/Download Service"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data",
+              "patterns": ["*/Download Service"]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data",
+              "patterns": ["*/Download Service"]
+            }
+          ]
+        },
+        {
+          "id": "teams_cache",
+          "name": "Microsoft Teams Cache",
+          "desc": "Teams media, chat and web app cache",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\Microsoft\\Teams\\Cache",
+            "%APPDATA%\\Microsoft\\Teams\\GPUCache",
+            "%APPDATA%\\Microsoft\\Teams\\Code Cache",
+            "%APPDATA%\\Microsoft\\Teams\\blob_storage"
+          ]
+        },
+        {
+          "id": "discord_cache",
+          "name": "Discord Cache",
+          "desc": "Discord media, audio and GPU shader caches",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\discord\\Cache",
+            "%APPDATA%\\discord\\Code Cache",
+            "%APPDATA%\\discord\\GPUCache",
+            "%APPDATA%\\discord\\blob_storage"
+          ]
+        },
+        {
+          "id": "slack_cache",
+          "name": "Slack Cache",
+          "desc": "Slack media and service worker caches",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\Slack\\Cache",
+            "%APPDATA%\\Slack\\Code Cache",
+            "%APPDATA%\\Slack\\GPUCache",
+            "%APPDATA%\\Slack\\Service Worker\\CacheStorage"
+          ]
+        },
+        {
+          "id": "zoom_cache",
+          "name": "Zoom Cache & Logs",
+          "desc": "Zoom meeting cache and diagnostic logs",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\Zoom\\logs",
+            "%APPDATA%\\Zoom\\data",
+            "%LOCALAPPDATA%\\Zoom\\Cache"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "apps",
+      "name": "Applications & Games",
+      "icon": "📦",
+      "targets": [
+        {
+          "id": "app_shelf_cache",
+          "name": "Installed App Cache & Installer Leftovers",
+          "desc": "Electron installer temp, and the Windows internet and web cache",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\SquirrelTemp",
+            "%LOCALAPPDATA%\\Microsoft\\Windows\\INetCache",
+            "%LOCALAPPDATA%\\Microsoft\\Windows\\WebCache"
+          ]
+        },
+        {
+          "id": "electron_app_caches",
+          "name": "Desktop App Caches (Discovered)",
+          "desc": "Cache, code cache and GPU cache folders of every Electron app installed on this machine",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%APPDATA%",
+              "patterns": ["*/GPUCache", "*/Code Cache", "*/Cache", "*/DawnGraphiteCache", "*/DawnWebGPUCache"]
+            },
+            {
+              "base": "%LOCALAPPDATA%",
+              "patterns": ["*/GPUCache", "*/Code Cache", "*/Cache", "*/DawnGraphiteCache", "*/DawnWebGPUCache"]
+            }
+          ]
+        },
+        {
+          "id": "old_app_versions",
+          "name": "Outdated App Versions",
+          "desc": "Superseded application builds; the newest build of every app is always kept",
+          "kind": "old_app_versions",
+          "roots": ["%LOCALAPPDATA%\\CapCut\\Apps", "%LOCALAPPDATA%\\Discord\\packages"]
+        },
+        {
+          "id": "game_shader_cache",
+          "name": "Game Shader & Texture Caches",
+          "desc": "Pre-baked assets from common game launchers",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\Epic GamesLauncher\\Saved",
+              "patterns": ["webcache", "webcache*", "Logs"]
+            },
+            {
+              "base": "%LOCALAPPDATA%",
+              "patterns": [
+                "Battle.net/Cache",
+                "Ubisoft Game Launcher/cache",
+                "EADesktop/cache",
+                "Rockstar Game Launcher/Cache",
+                "Blizzard/Battle.net/Cache",
+                "Riot Games/Riot Client/Cache",
+                "VALORANT/Saved/Logs",
+                "wgames/Epic GamesLauncher/Saved/webcache*"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "obs_replay_cache",
+          "name": "Recording & Streaming Cache",
+          "desc": "OBS, Streamlabs and capture scratch data",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\obs-studio\\cache",
+            "%APPDATA%\\obs-studio\\logs",
+            "%APPDATA%\\Streamlabs\\Service\\Cache"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dev",
+      "name": "Developer Toolchains",
+      "icon": "💻",
+      "targets": [
+        {
+          "id": "dev_cache",
+          "name": "Package Download Caches",
+          "desc": "npm, pip, yarn, NuGet, Cargo, Gradle, Go and Composer download caches - packages are re-downloaded on demand",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\npm-cache",
+            "%APPDATA%\\npm-cache",
+            "%LOCALAPPDATA%\\pip\\cache",
+            "%LOCALAPPDATA%\\pypa\\pip\\cache",
+            "%APPDATA%\\Yarn\\Cache",
+            "%LOCALAPPDATA%\\Yarn\\Cache",
+            "%LOCALAPPDATA%\\NuGet\\Cache",
+            "%LOCALAPPDATA%\\v3-cache",
+            "%USERPROFILE%\\.cargo\\registry\\cache",
+            "%USERPROFILE%\\.gradle\\caches\\modules-2",
+            "%LOCALAPPDATA%\\go-build",
+            "%USERPROFILE%\\go\\pkg\\mod\\cache\\download",
+            "%LOCALAPPDATA%\\Composer\\cache",
+            "%APPDATA%\\Composer\\cache"
+          ]
+        },
+        {
+          "id": "dev_stores",
+          "name": "Package Stores (re-download required)",
+          "desc": "Global package stores of NuGet, Gradle, Maven and pnpm - projects keep working, but the next build downloads the packages again",
+          "kind": "paths",
+          "opt_in": true,
+          "paths": [
+            "%USERPROFILE%\\.nuget\\packages",
+            "%USERPROFILE%\\.gradle\\caches",
+            "%USERPROFILE%\\.m2\\repository",
+            "%LOCALAPPDATA%\\pnpm-store",
+            "%LOCALAPPDATA%\\pnpm\\store"
+          ]
+        },
+        {
+          "id": "editor_caches",
+          "name": "Code Editor Caches",
+          "desc": "VS Code, Insiders, Cursor, VSCodium and friends - cached extensions, code cache and crash dumps",
+          "kind": "editor_cache",
+          "apps": ["Code", "Code - Insiders", "Cursor", "VSCodium", "Windsurf", "Trae", "Positron"]
+        },
+        {
+          "id": "jetbrains_cache",
+          "name": "JetBrains IDE Caches",
+          "desc": "Indexes, caches and logs of every installed JetBrains IDE",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%LOCALAPPDATA%\\JetBrains",
+              "patterns": ["*/caches", "*/index", "*/log", "*/tmp"]
+            }
+          ]
+        },
+        {
+          "id": "docker_cache",
+          "name": "Docker Logs & Build Scratch",
+          "desc": "Docker client logs and container scratch data",
+          "kind": "paths",
+          "paths": ["%LOCALAPPDATA%\\Docker\\log"]
+        },
+        {
+          "id": "android_cache",
+          "name": "Android & Emulator Cache",
+          "desc": "Android SDK system images and emulator scratch data",
+          "kind": "paths",
+          "opt_in": true,
+          "paths": [
+            "%LOCALAPPDATA%\\Android\\Sdk\\system-images",
+            "%USERPROFILE%\\.android\\cache",
+            "%LOCALAPPDATA%\\Temp\\AndroidEmulator"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "name": "Media & Creative Apps",
+      "icon": "🎞️",
+      "targets": [
+        {
+          "id": "adobe_media_cache",
+          "name": "Adobe Media Cache",
+          "desc": "After Effects, Premiere and Photoshop media caches",
+          "kind": "glob",
+          "roots": [
+            {
+              "base": "%APPDATA%\\Adobe",
+              "patterns": [
+                "Common/Media Cache Files",
+                "Common/Media Cache",
+                "After Effects/*/Media Cache",
+                "Premiere Pro/*/Media Cache",
+                "Photoshop*/AutoRecover"
+              ]
+            },
+            {
+              "base": "%LOCALAPPDATA%\\Adobe",
+              "patterns": ["Common/Media Cache Files", "Common/Media Cache"]
+            }
+          ]
+        },
+        {
+          "id": "resolve_cache",
+          "name": "DaVinci Resolve Fusion Cache",
+          "desc": "Fusion disk cache and media cache of DaVinci Resolve",
+          "kind": "paths",
+          "paths": [
+            "%APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Cache",
+            "%APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Media Cache",
+            "%LOCALAPPDATA%\\Blackmagic Design\\DaVinci Resolve\\Cache",
+            "%PROGRAMDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Cache"
+          ]
+        },
+        {
+          "id": "capcut_cache",
+          "name": "CapCut Media Cache",
+          "desc": "CapCut preview and GPU caches (the installed app itself is never touched)",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\CapCut\\User Data\\Cache",
+            "%LOCALAPPDATA%\\CapCut\\User Data\\GPUCache",
+            "%LOCALAPPDATA%\\CapCut\\Cache"
+          ]
+        },
+        {
+          "id": "music_cache",
+          "name": "Music & Podcast Caches",
+          "desc": "Spotify and Windows media player cache data",
+          "kind": "paths",
+          "paths": [
+            "%LOCALAPPDATA%\\Spotify\\Storage",
+            "%LOCALAPPDATA%\\Spotify\\Data",
+            "%LOCALAPPDATA%\\Microsoft\\Music\\Player"
+          ]
+        }
+      ]
+    }
+  ]
+}

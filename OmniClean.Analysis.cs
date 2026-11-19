@@ -27,44 +27,63 @@ namespace OmniClean {
             btnStopLargeFiles.Visibility = Visibility.Visible;
             btnStopLargeFiles.IsEnabled = true;
             pnlLargeFiles.Children.Clear();
-            txtLargeFilesSummary.Text = "Scanning user profile and common storage directories for files > 100 MB...";
+            txtLargeFilesSummary.Text = "Deep-scanning " + selectedDriveLetter + ":\\ for large files. This walks the whole volume and can take a few minutes...";
 
             Task.Run(new Action(() => {
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string[] searchDirs = new string[] {
-                    Path.Combine(userProfile, "Downloads"),
-                    Path.Combine(userProfile, "Documents"),
-                    Path.Combine(userProfile, "Desktop"),
-                    Path.Combine(userProfile, "Videos"),
-                    Path.Combine(userProfile, "Music"),
-                    Path.Combine(userProfile, "Pictures")
-                };
-
                 var found = new List<LargeFileInfo>();
                 bool cancelled = false;
+                long scannedFiles = 0;
+                long scannedDirs = 0;
+
+                // The whole volume is walked, not just the user profile:
+                // large media and archives often live outside it.
+                string root = selectedDriveLetter + ":\\";
+                long minBytes = currentMinLargeFileBytes;
+
+                var stack = new Stack<string>();
+                stack.Push(root);
 
                 try {
-                    foreach (var dir in searchDirs) {
+                    while (stack.Count > 0) {
                         if (token.IsCancellationRequested) { cancelled = true; break; }
-                        if (Directory.Exists(dir)) {
-                            try {
-                                foreach (var f in Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories)) {
-                                    if (token.IsCancellationRequested) { cancelled = true; break; }
-                                    try {
-                                        FileInfo fi = new FileInfo(f);
-                                        if (fi.Length > 100 * 1024 * 1024) { // > 100 MB
-                                            found.Add(new LargeFileInfo {
-                                                FilePath = fi.FullName,
-                                                FileName = fi.Name,
-                                                Extension = fi.Extension.ToUpper().Replace(".", ""),
-                                                Bytes = fi.Length,
-                                                SizeMB = fi.Length / (1024.0 * 1024.0)
-                                            });
-                                        }
-                                    } catch { }
-                                }
-                            } catch { }
+                        string current = stack.Pop();
+                        scannedDirs++;
+
+                        string[] files = null;
+                        string[] dirs = null;
+                        try { files = Directory.GetFiles(current); } catch { files = null; }
+                        try { dirs = Directory.GetDirectories(current); } catch { dirs = null; }
+
+                        if (files != null) {
+                            for (int i = 0; i < files.Length; i++) {
+                                if (token.IsCancellationRequested) { cancelled = true; break; }
+                                scannedFiles++;
+                                try {
+                                    var fi = new FileInfo(files[i]);
+                                    if (fi.Length < minBytes) continue;
+                                    found.Add(new LargeFileInfo {
+                                        FilePath = fi.FullName,
+                                        FileName = fi.Name,
+                                        Extension = fi.Extension.ToUpper().Replace(".", ""),
+                                        Bytes = fi.Length,
+                                        SizeMB = fi.Length / (1024.0 * 1024.0)
+                                    });
+                                } catch { }
+                            }
                         }
+
+                        if (dirs != null) {
+                            for (int i = 0; i < dirs.Length; i++) {
+                                // A junction or symlink can point back up the
+                                // tree; following it would loop forever.
+                                try {
+                                    if (IsReparsePoint(new DirectoryInfo(dirs[i]))) continue;
+                                } catch { continue; }
+                                stack.Push(dirs[i]);
+                            }
+                        }
+
+                        if (cancelled) break;
                     }
                 } catch { }
 
@@ -80,18 +99,27 @@ namespace OmniClean {
                     if (cancelled) {
                         txtLargeFilesSummary.Text = "Scan cancelled by user. Results discarded - run the scan again when ready.";
                     } else {
-                        ApplyLargeFileFilter(currentMinLargeFileBytes);
+                        ApplyLargeFileFilter(currentMinLargeFileBytes, scannedDirs, scannedFiles);
                     }
                 }));
             }));
         }
 
         static void ApplyLargeFileFilter(long minBytes) {
+            ApplyLargeFileFilter(minBytes, 0, 0);
+        }
+
+        static void ApplyLargeFileFilter(long minBytes, long scannedDirs, long scannedFiles) {
             currentMinLargeFileBytes = minBytes;
             pnlLargeFiles.Children.Clear();
 
             var filtered = allLargeFiles.FindAll(x => x.Bytes >= minBytes);
-            txtLargeFilesSummary.Text = string.Format("Found {0} files matching size filter.", filtered.Count);
+            if (scannedDirs > 0) {
+                txtLargeFilesSummary.Text = string.Format("Found {0} large files in {1} folders ({2:N0} files scanned).", filtered.Count, scannedDirs, scannedFiles);
+            } else {
+                txtLargeFilesSummary.Text = string.Format("Found {0} files matching size filter.", filtered.Count);
+            }
+
 
             if (filtered.Count == 0) {
                 TextBlock empty = new TextBlock();

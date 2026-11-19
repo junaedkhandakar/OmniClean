@@ -4,27 +4,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { categoryIds, groupedTargets, decorateGroups } = require('./lib/taxonomy');
 
 const PORT = Number(process.env.PORT) || 4982;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SCAN_SCRIPT = path.join(__dirname, 'scan.ps1');
 const CLEANER_SCRIPT = path.join(__dirname, 'cleaner.ps1');
+const LARGEFILES_SCRIPT = path.join(__dirname, 'largefiles.ps1');
 const TASK_NAME = 'StorageOptimizerAutoClean';
 
-// Known cleanup categories. MUST stay in sync with the ids in targets.ps1
-// (test/smoke.test.js fails if the two lists drift apart).
-const CATEGORIES = Object.freeze([
-    'recycle_bin',
-    'temp_files',
-    'browser_cache',
-    'win_update',
-    'crash_dumps',
-    'nvidia_artifacts',
-    'capcut_old',
-    'vscode_cache',
-    'dev_cache',
-    'discord_cache'
-]);
+// Known cleanup categories, derived from the shared taxonomy in
+// targets.json so they can never drift from the engine.
+const CATEGORIES = Object.freeze(categoryIds());
 
 const CATEGORY_ID_RE = /^[a-z][a-z0-9_]*$/;
 const DRIVE_RE = /^[A-Za-z]:$/;
@@ -40,6 +31,7 @@ const STATUS_TTL_MS = 20_000;
 const SCAN_TIMEOUT_MS = 180_000;
 const CLEAN_TIMEOUT_MS = 900_000;
 const SCHEDULE_TIMEOUT_MS = 30_000;
+const LARGEFILES_TIMEOUT_MS = 1_800_000;
 const MAX_BODY_BYTES = 8 * 1024;
 // Hard ceiling: a body this large is not a legitimate request, so the
 // socket is torn down instead of being drained any further.
@@ -167,6 +159,24 @@ async function scanStatus(drive, forceFresh = false) {
     } catch {
         throw new Error('Scan produced invalid JSON');
     }
+
+    // The category names and group icons come from the taxonomy here, so
+    // the non-ASCII characters never have to survive the PowerShell console
+    // codepage.
+    if (Array.isArray(data.groups)) {
+        data.groups = decorateGroups(data.groups);
+    }
+    if (Array.isArray(data.categories) && Array.isArray(data.groups)) {
+        const names = new Map();
+        for (const group of data.groups) {
+            for (const target of group.targets) names.set(target.id, target);
+        }
+        data.categories = data.categories.map((c) => {
+            const meta = names.get(c.id);
+            return meta ? { ...c, name: meta.name, desc: meta.desc, kind: meta.kind } : c;
+        });
+    }
+
     statusCache.set(key, { ts: Date.now(), data });
     return data;
 }
@@ -290,6 +300,51 @@ async function handleRequest(req, res) {
             sendJson(res, 500, { error: err.message });
         } finally {
             cleanInProgress = false;
+        }
+        return;
+    }
+
+    // 4b. API: Taxonomy - the grouped cleanup catalogue.
+    if (url.pathname === '/api/taxonomy' && req.method === 'GET') {
+        sendJson(res, 200, { groups: groupedTargets() });
+        return;
+    }
+
+    // 4c. API: Large files - deep scan of a whole volume.
+    if (url.pathname === '/api/largefiles' && req.method === 'GET') {
+        const drive = url.searchParams.get('drive') || 'C:';
+        if (!DRIVE_RE.test(drive)) {
+            sendJson(res, 400, { error: 'Invalid drive parameter' });
+            return;
+        }
+
+        const minSize = Number(url.searchParams.get('minSizeMB') || 100);
+        if (!Number.isFinite(minSize) || minSize < 1 || minSize > 102400) {
+            sendJson(res, 400, { error: 'minSizeMB must be between 1 and 102400' });
+            return;
+        }
+
+        const top = Number(url.searchParams.get('top') || 200);
+        const safeTop = Number.isFinite(top) ? Math.min(1000, Math.max(1, Math.floor(top))) : 200;
+
+        try {
+            const result = await runPowerShell(
+                LARGEFILES_SCRIPT,
+                ['-Drive', drive, '-MinSizeMB', String(Math.floor(minSize)), '-Top', String(safeTop)],
+                LARGEFILES_TIMEOUT_MS
+            );
+            if (!result.success || !result.output) {
+                throw new Error(result.error || 'Large file scan produced no output');
+            }
+            let data;
+            try {
+                data = JSON.parse(result.output);
+            } catch {
+                throw new Error('Large file scan produced invalid JSON');
+            }
+            sendJson(res, 200, data);
+        } catch (err) {
+            sendJson(res, 500, { error: err.message });
         }
         return;
     }

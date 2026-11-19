@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniClean - Windows storage optimizer that shows its work</title>
+<meta name="description" content="OmniClean is a single-file Windows storage optimizer: 41 cleanup targets across 6 groups, a whole-volume deep scan, SHA-256 duplicate detection and a startup manager. Preview every deletion before it happens.">
+<meta name="theme-color" content="#161616">
+<meta property="og:type" content="website">
+<meta property="og:title" content="OmniClean - Windows storage optimizer">
+<meta property="og:description" content="A single 186 KB executable that finds and removes real cache waste on Windows, with a preview-first safety model.">
+<meta property="og:image" content="assets/omniclean-mark.svg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="shell masthead-inner">
+    <a class="wordmark" href="#top" aria-label="OmniClean home">
+      <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#0078D4"/>
+        <path d="M17.5 6 9 17.5h5.5L13 26l9-12h-5.5z" fill="#fff"/>
+      </svg>
+      <span class="wordmark-text">OmniClean</span>
+    </a>
+    <nav class="masthead-nav" aria-label="Primary">
+      <a href="#targets">Targets</a>
+      <a href="#tools">Tools</a>
+      <a href="#safety">Safety</a>
+      <a href="#build">Build</a>
+    </nav>
+    <div class="masthead-actions">
+      <a class="btn btn-ghost" href="https://github.com/junaedkhandakar/OmniClean" target="_blank" rel="noreferrer">Source</a>
+      <a class="btn btn-primary" href="https://github.com/junaedkhandakar/OmniClean/releases" target="_blank" rel="noreferrer">Download</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- HERO -->
+  <section class="hero" id="top">
+    <div class="shell hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow">Windows 10 &amp; 11 &middot; v1.2.0 &middot; MIT</p>
+        <h1>Find the space your disk is actually wasting.</h1>
+        <p class="lede">
+          OmniClean is one 186&nbsp;KB executable with no runtime dependencies. It scans
+          every cache category Windows and your apps leave behind, walks entire volumes
+          for oversized files, and finds byte-identical duplicates with SHA-256. Every
+          deletion is previewed first, then written to an audit manifest.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="https://github.com/junaedkhandakar/OmniClean/releases" target="_blank" rel="noreferrer">
+            Download OmniClean.exe
+          </a>
+          <a class="btn btn-ghost btn-lg" href="#targets">See what it cleans</a>
+        </div>
+        <dl class="hero-facts">
+          <div><dt>Cleanup targets</dt><dd>41</dd></div>
+          <div><dt>Categories</dt><dd>6</dd></div>
+          <div><dt>Executable size</dt><dd>186 KB</dd></div>
+          <div><dt>Runtime deps</dt><dd>0</dd></div>
+        </dl>
+      </div>
+
+      <figure class="hero-shot">
+        <div class="shot-frame">
+          <img src="assets/screenshot.png" width="2440" height="1600"
+               alt="OmniClean's Storage Cleaner tab showing drive capacity, a circular free-space gauge and a grouped list of cleanable targets.">
+        </div>
+        <figcaption>The Storage Cleaner tab. Every target shows its measured size before anything is selected.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- APPLICATION VIEW -->
+  <section class="section section-app">
+    <div class="shell">
+      <figure class="shot-full">
+        <div class="shot-full-frame">
+          <img src="assets/screenshot.png" width="2440" height="1600"
+               alt="The OmniClean Storage Cleaner tab: a drive capacity panel with a circular free-space gauge, the storage memory panel, and a grouped list of cleanable targets with measured sizes.">
+        </div>
+        <figcaption>
+          One tab, everything measured before you act. The target list is
+          grouped by category, the drive picker switches volumes, and the
+          preview toggle defaults to a run that deletes nothing.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- TARGETS -->
+  <section class="section" id="targets">
+    <div class="shell">
+      <header class="section-head">
+        <p class="eyebrow">Cleanup taxonomy</p>
+        <h2>41 targets, six groups, one shared definition</h2>
+        <p class="section-lede">
+          Targets are declared once in <code>targets.json</code> and read by both the native
+          engine and the web engine, so a cleanup category can never exist on one side
+          only. Discovery is dynamic: browsers, GPU vendors and editors are found on your
+          machine, not hard-coded to a list.
+        </p>
+      </header>
+
+      <div class="group-grid">
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>System &amp; Operating System</h3>
+            <span class="group-count">12</span>
+          </header>
+          <ul class="target-list">
+            <li>Recycle Bin</li>
+            <li>Temporary System &amp; User Files</li>
+            <li>Windows Update Downloads</li>
+            <li>Delivery Optimization Cache</li>
+            <li>Windows Diagnostic &amp; Event Logs</li>
+            <li>Crash Dumps &amp; Error Reports</li>
+            <li>Thumbnail &amp; Icon Cache</li>
+            <li>Font Cache</li>
+            <li>Windows Defender Quarantine</li>
+            <li>Microsoft Store App Temp State</li>
+            <li>Microsoft Store App Local Cache</li>
+            <li>Empty Temporary Directories</li>
+          </ul>
+        </article>
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>Graphics, GPU &amp; Shader Caches</h3>
+            <span class="group-count">7</span>
+          </header>
+          <ul class="target-list">
+            <li>DirectX &amp; D3D Bytecode Cache</li>
+            <li>NVIDIA Driver &amp; Shader Cache</li>
+            <li>AMD Driver &amp; Shader Cache</li>
+            <li>Intel Graphics &amp; Shader Cache</li>
+            <li>Vulkan, OpenGL &amp; Mesa Cache</li>
+            <li>Steam Shader Pre-Cache</li>
+            <li>Discovered Graphics Caches (any vendor)</li>
+          </ul>
+        </article>
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>Browsers &amp; Internet Apps</h3>
+            <span class="group-count">7</span>
+          </header>
+          <ul class="target-list">
+            <li>Browser Caches &amp; Shaders</li>
+            <li>Browser Service Worker Cache</li>
+            <li>Browser Download Metadata</li>
+            <li>Microsoft Teams Cache</li>
+            <li>Discord Cache</li>
+            <li>Slack Cache</li>
+            <li>Zoom Cache &amp; Logs</li>
+          </ul>
+        </article>
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>Applications &amp; Games</h3>
+            <span class="group-count">5</span>
+          </header>
+          <ul class="target-list">
+            <li>Installed App Cache &amp; Installer Leftovers</li>
+            <li>Desktop App Caches (discovered)</li>
+            <li>Outdated App Versions</li>
+            <li>Game Shader &amp; Texture Caches</li>
+            <li>Recording &amp; Streaming Cache</li>
+          </ul>
+        </article>
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>Developer Toolchains</h3>
+            <span class="group-count">6</span>
+          </header>
+          <ul class="target-list">
+            <li>Package Download Caches</li>
+            <li>Package Stores (re-download required)</li>
+            <li>Code Editor Caches</li>
+            <li>JetBrains IDE Caches</li>
+            <li>Docker Logs &amp; Build Scratch</li>
+            <li>Android &amp; Emulator Cache</li>
+          </ul>
+        </article>
+
+        <article class="group-card">
+          <header class="group-head">
+            <h3>Media &amp; Creative Apps</h3>
+            <span class="group-count">4</span>
+          </header>
+          <ul class="target-list">
+            <li>Adobe Media Cache</li>
+            <li>DaVinci Resolve Fusion Cache</li>
+            <li>CapCut Media Cache</li>
+            <li>Music &amp; Podcast Caches</li>
+          </ul>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- TOOLS -->
+  <section class="section section-alt" id="tools">
+    <div class="shell">
+      <header class="section-head">
+        <p class="eyebrow">Beyond cache cleaning</p>
+        <h2>Four tools that find what a category list cannot</h2>
+        <p class="section-lede">
+          A fixed taxonomy only reaches the folders we know about. These tools go looking
+          for the ones we do not.
+        </p>
+      </header>
+
+      <div class="tool-grid">
+        <article class="tool-card">
+          <span class="tool-index">01</span>
+          <h3>Deep storage scan</h3>
+          <p>
+            Walks an entire volume rather than your user profile, because large media and
+            archives usually live outside it. Reparse points are skipped, so a junction
+            pointing back up the tree cannot turn the walk into an infinite loop. Results
+            are ranked by file, folder and file type.
+          </p>
+          <p class="tool-meta">Minimum size filter from 50 MB to 5 GB</p>
+        </article>
+
+        <article class="tool-card">
+          <span class="tool-index">02</span>
+          <h3>Duplicate finder</h3>
+          <p>
+            Two-phase detection. Files are grouped by exact byte size first, then
+            size-matched candidates are hashed with a full-file SHA-256 stream. No prefix
+            hashing, no false positives. Originals stay marked and only redundant copies
+            are ever offered for removal.
+          </p>
+          <p class="tool-meta">Byte-level certainty, not a guess</p>
+        </article>
+
+        <article class="tool-card">
+          <span class="tool-index">03</span>
+          <h3>Startup manager</h3>
+          <p>
+            Reads auto-launch entries from both <code>HKCU</code> and <code>HKLM</code>
+            Run keys. Disabling an entry parks it under
+            <code>HKCU\Software\OmniClean\DisabledStartup</code> instead of deleting it,
+            so the launch command survives and can be restored at any time.
+          </p>
+          <p class="tool-meta">Machine-wide entries report when admin rights are needed</p>
+        </article>
+
+        <article class="tool-card">
+          <span class="tool-index">04</span>
+          <h3>Memory trim</h3>
+          <p>
+            Flushes idle working sets through the Windows PSAPI subsystem to hand physical
+            memory back to the system. Background applications keep running; nothing is
+            terminated or restarted.
+          </p>
+          <p class="tool-meta">No resident daemon, no tray icon</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAFETY -->
+  <section class="section" id="safety">
+    <div class="shell safety-layout">
+      <div class="safety-copy">
+        <p class="eyebrow">Safety model</p>
+        <h2>What OmniClean will never do</h2>
+        <p class="section-lede">
+          A storage cleaner is only useful if you can trust it. These boundaries are
+          enforced in both engines and asserted by the test suite, not just documented.
+        </p>
+        <ul class="promise-list">
+          <li>
+            <h3>Never deletes personal documents</h3>
+            <p>Documents, Desktop, Pictures, Music and OneDrive are untouched by general cleanups. Large files and duplicates are only removed after you review them individually.</p>
+          </li>
+          <li>
+            <h3>Never touches logins, cookies or history</h3>
+            <p>Browser cleaning is restricted to <code>Cache</code>, <code>Code Cache</code> and <code>GPUCache</code>. Saved passwords, cookies, session tokens and bookmarks are never read or deleted.</p>
+          </li>
+          <li>
+            <h3>Never sweeps the registry</h3>
+            <p>No speculative registry cleaning that can break COM interfaces or file associations. Registry access is limited to reading and toggling documented startup keys.</p>
+          </li>
+          <li>
+            <h3>Never defragments SSDs</h3>
+            <p>Solid state drives take unnecessary flash cell wear from traditional defragmentation. OmniClean does not touch storage media layout.</p>
+          </li>
+          <li>
+            <h3>Never runs in the background</h3>
+            <p>Zero tray icons, zero resident services, zero resource use when closed. Scheduled runs rely entirely on the built-in Windows Task Scheduler.</p>
+          </li>
+        </ul>
+      </div>
+
+      <aside class="safety-aside">
+        <h3>How a cleanup is gated</h3>
+        <ol class="gate-steps">
+          <li>
+            <span class="gate-num">1</span>
+            <div>
+              <h4>Scan and measure</h4>
+              <p>Every target's real size is computed on disk. Nothing is estimated.</p>
+            </div>
+          </li>
+          <li>
+            <span class="gate-num">2</span>
+            <div>
+              <h4>Preview by default</h4>
+              <p>The API treats <code>dryRun</code> as true unless the caller explicitly asks otherwise. The UI ships with preview switched on.</p>
+            </div>
+          </li>
+          <li>
+            <span class="gate-num">3</span>
+            <div>
+              <h4>Confirm with impact summary</h4>
+              <p>A live run requires an explicit confirmation showing the selected targets and estimated reclaim.</p>
+            </div>
+          </li>
+          <li>
+            <span class="gate-num">4</span>
+            <div>
+              <h4>Write an audit manifest</h4>
+              <p>Every removed item, every failure and its reason, and a final summary are written to <code>%APPDATA%\OmniClean\logs</code>.</p>
+            </div>
+          </li>
+        </ol>
+        <p class="safety-note">
+          A protected-path guard exists in both engines: <code>WinSxS</code>,
+          <code>Installer</code>, <code>DriverStore</code>, <code>Package Cache</code>,
+          <code>System32\config</code> and <code>Program Files</code> can never be emptied,
+          even if a taxonomy entry points at them.
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- BUILD -->
+  <section class="section section-alt" id="build">
+    <div class="shell">
+      <header class="section-head">
+        <p class="eyebrow">Under the hood</p>
+        <h2>Two editions, one engine definition</h2>
+        <p class="section-lede">
+          The native build is C# 5 and WPF on the .NET Framework that ships with Windows.
+          The web edition is a local Node backend driving the same PowerShell engine.
+          Both read the same taxonomy.
+        </p>
+      </header>
+
+      <div class="edition-table" role="table" aria-label="Edition comparison">
+        <div class="edition-row edition-head" role="row">
+          <span role="columnheader"></span>
+          <span role="columnheader">Native</span>
+          <span role="columnheader">Web</span>
+        </div>
+        <div class="edition-row" role="row">
+          <span role="cell" class="edition-key">Entry point</span>
+          <span role="cell"><code>OmniClean.exe</code></span>
+          <span role="cell"><code>npm start</code></span>
+        </div>
+        <div class="edition-row" role="row">
+          <span role="cell" class="edition-key">Stack</span>
+          <span role="cell">C# 5 / WPF, zero runtime deps</span>
+          <span role="cell">Node.js + PowerShell engine</span>
+        </div>
+        <div class="edition-row" role="row">
+          <span role="cell" class="edition-key">Distribution</span>
+          <span role="cell">Single standalone executable</span>
+          <span role="cell">Local server on 127.0.0.1</span>
+        </div>
+        <div class="edition-row" role="row">
+          <span role="cell" class="edition-key">Cleanup targets</span>
+          <span role="cell">41 (embedded taxonomy)</span>
+          <span role="cell">41 (shared targets.json)</span>
+        </div>
+        <div class="edition-row" role="row">
+          <span role="cell" class="edition-key">Deep scan</span>
+          <span role="cell">Cancellable, whole volume</span>
+          <span role="cell">Cancellable, whole volume</span>
+        </div>
+      </div>
+
+      <div class="build-grid">
+        <div class="build-block">
+          <h3>Build the native executable</h3>
+          <p>No Visual Studio and no third-party SDKs. <code>build.rsp</code> holds the compiler flags so the script, CI and a manual build can never drift apart.</p>
+          <pre><code>build.bat</code></pre>
+          <p class="build-alt">Or directly with the .NET compiler:</p>
+          <pre><code>$csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+&amp; $csc "@build.rsp"</code></pre>
+        </div>
+        <div class="build-block">
+          <h3>Run the web edition</h3>
+          <p>Node.js 18 or newer. The server binds to loopback only, rejects foreign <code>Host</code> and <code>Origin</code> headers, and executes PowerShell through an argument array rather than a shell.</p>
+          <pre><code>npm ci
+npm start</code></pre>
+          <p class="build-alt">Then run the suite:</p>
+          <pre><code>npm test</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section closing">
+    <div class="shell closing-inner">
+      <h2>Take back the space.</h2>
+      <p>
+        One executable, no installer, no background services. Download it, run a preview
+        cleanup, and see exactly what it would remove before you let it.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="https://github.com/junaedkhandakar/OmniClean/releases" target="_blank" rel="noreferrer">Download v1.2.0</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/junaedkhandakar/OmniClean" target="_blank" rel="noreferrer">Read the source</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="shell footer-inner">
+    <div class="footer-brand">
+      <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#0078D4"/>
+        <path d="M17.5 6 9 17.5h5.5L13 26l9-12h-5.5z" fill="#fff"/>
+      </svg>
+      <div>
+        <p class="footer-name">OmniClean</p>
+        <p class="footer-note">Universal Windows storage optimizer</p>
+      </div>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <div>
+        <h4>Product</h4>
+        <a href="#targets">Cleanup targets</a>
+        <a href="#tools">Tools</a>
+        <a href="#safety">Safety model</a>
+      </div>
+      <div>
+        <h4>Project</h4>
+        <a href="https://github.com/junaedkhandakar/OmniClean" target="_blank" rel="noreferrer">Source code</a>
+        <a href="https://github.com/junaedkhandakar/OmniClean/releases" target="_blank" rel="noreferrer">Releases</a>
+        <a href="https://github.com/junaedkhandakar/OmniClean/issues" target="_blank" rel="noreferrer">Issues</a>
+      </div>
+      <div>
+        <h4>Licence</h4>
+        <p class="footer-note">MIT</p>
+      </div>
+    </nav>
+  </div>
+  <div class="shell footer-legal">
+    <p>OmniClean is not affiliated with Microsoft. Windows is a trademark of Microsoft Corporation.</p>
+  </div>
+</footer>
+
+<script src="assets/app.js" defer></script>
+</body>
+</html>

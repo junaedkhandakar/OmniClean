@@ -22,8 +22,8 @@ using Microsoft.Win32;
 [assembly: AssemblyProduct("OmniClean Universal Windows Performance & Storage Suite")]
 [assembly: AssemblyCompany("Junaed Khandakar")]
 [assembly: AssemblyCopyright("Copyright 2026 Junaed Khandakar")]
-[assembly: AssemblyVersion("1.0.5.0")]
-[assembly: AssemblyFileVersion("1.0.5.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace OmniClean {
     public class CategoryItem {
@@ -68,7 +68,7 @@ namespace OmniClean {
     }
 
     partial class Program {
-        const string CURRENT_VERSION = "v1.1.0";
+        const string CURRENT_VERSION = "v1.2.0";
         const string REPO_URL = "https://github.com/Junaed93/OmniClean";
         const string RELEASES_API = "https://api.github.com/repos/Junaed93/OmniClean/releases/latest";
         const string TASK_NAME = "OmniCleanUniversalAutoClean";
@@ -646,11 +646,11 @@ namespace OmniClean {
                     <!-- App Icon & Title -->
                     <StackPanel Grid.Column='0' Orientation='Horizontal' VerticalAlignment='Center'>
                         <Border Width='22' Height='22' Background='#0078D4' CornerRadius='5' Margin='0,0,10,0'>
-                            <TextBlock Text='⚡' FontSize='12' Foreground='White' HorizontalAlignment='Center' VerticalAlignment='Center'/>
+                            <TextBlock Text='&#xE770;' FontFamily='Segoe Fluent Icons, Segoe MDL2 Assets' FontSize='12' Foreground='White' HorizontalAlignment='Center' VerticalAlignment='Center'/>
                         </Border>
                         <TextBlock Text='OmniClean' FontSize='12' FontWeight='SemiBold' Foreground='#FFFFFF' VerticalAlignment='Center'/>
                         <Border Background='#2D2D2D' BorderBrush='#3D3D3D' BorderThickness='1' CornerRadius='4' Padding='6,1' Margin='8,0,0,0' VerticalAlignment='Center'>
-                            <TextBlock Text='v1.0.5' FontSize='10' Foreground='#60CDFF'/>
+                            <TextBlock Name='txtTitleVersion' Text='v1.2.0' FontSize='10' Foreground='#60CDFF'/>
                         </Border>
                     </StackPanel>
 
@@ -1058,7 +1058,7 @@ namespace OmniClean {
                                 <Border Grid.Column='1' Background='{StaticResource BrushCard}' BorderBrush='{StaticResource BrushCardBorder}' BorderThickness='1' Padding='20' Margin='8,0,0,0'>
                                     <StackPanel>
                                         <TextBlock Text='System Specifications' FontSize='17' FontWeight='SemiBold' Foreground='White' Margin='0,0,0,6'/>
-                                        <TextBlock Text='OmniClean v1.0.5 Standalone Edition' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,14'/>
+                                        <TextBlock Name='txtEditionLabel' Text='OmniClean Standalone Edition' FontSize='12' Foreground='#C5C5C5' Margin='0,0,0,14'/>
 
                                         <Border Background='{StaticResource BrushInnerPanel}' BorderBrush='#383838' BorderThickness='1' CornerRadius='6' Padding='14' Margin='0,0,0,16'>
                                             <StackPanel>
@@ -1104,6 +1104,29 @@ namespace OmniClean {
                     }
                 }
 
+                // Verifies that the shared cleanup taxonomy is embedded and
+                // parses. CI runs this so a broken targets.json can never
+                // ship inside the executable.
+                if (args != null && Array.IndexOf(args, "--validate-taxonomy") >= 0) {
+                    try {
+                        List<CleanupGroup> groups = LoadTaxonomy();
+                        int targetCount = 0;
+                        foreach (CleanupGroup g in groups) targetCount += g.Targets.Count;
+                        if (groups.Count == 0 || targetCount == 0) {
+                            File.WriteAllText("taxonomy-validation.log",
+                                "TAXONOMY VALIDATION FAILED: no groups were loaded.\r\n");
+                            Environment.Exit(1);
+                        }
+                        File.WriteAllText("taxonomy-validation.log",
+                            string.Format("OK: {0} groups, {1} cleanup targets embedded.\r\n", groups.Count, targetCount));
+                        Environment.Exit(0);
+                    } catch (Exception tx) {
+                        File.WriteAllText("taxonomy-validation.log",
+                            "TAXONOMY VALIDATION FAILED:\r\n" + tx.ToString());
+                        Environment.Exit(1);
+                    }
+                }
+
                 mainWindow = (Window)XamlReader.Parse(xaml);
 
                 // Native Windows 11 DWM Chrome: Rounded corners, Dark Mode, and Mica System Backdrop
@@ -1123,6 +1146,14 @@ namespace OmniClean {
                 btnMaximize = (Button)mainWindow.FindName("btnMaximize");
                 btnClose = (Button)mainWindow.FindName("btnClose");
                 txtHeaderUptimePill = (TextBlock)mainWindow.FindName("txtHeaderUptimePill");
+
+                // Show the real version instead of a hard-coded one, so the
+                // title bar can never drift away from CURRENT_VERSION.
+                var txtTitleVersion = mainWindow.FindName("txtTitleVersion") as TextBlock;
+                if (txtTitleVersion != null) txtTitleVersion.Text = CURRENT_VERSION;
+
+                var txtEditionLabel = mainWindow.FindName("txtEditionLabel") as TextBlock;
+                if (txtEditionLabel != null) txtEditionLabel.Text = "OmniClean " + CURRENT_VERSION + " Standalone Edition";
 
                 titleBar.MouseLeftButtonDown += (s, e) => {
                     if (e.ClickCount == 2) {
@@ -1290,7 +1321,7 @@ namespace OmniClean {
                 CheckForUpdatesAsync(false);
                 StartUptimeTimer();
 
-                Log("OmniClean v1.0.5 initialized.");
+                Log("OmniClean " + CURRENT_VERSION + " initialized.");
                 Log(string.Format("Host OS: {0} ({1}-bit)", Environment.OSVersion, Environment.Is64BitOperatingSystem ? "64" : "32"));
                 Log("Select cleanable targets and click 'Clean Selected Storage'.");
 
@@ -1631,18 +1662,31 @@ namespace OmniClean {
             categories.Clear();
             pnlCategories.Children.Clear();
 
-            AddCategory("recycle_bin", "Windows Recycle Bin", "All files and deleted items sent to the Recycle Bin", "🗑️", "#60CDFF");
-            AddCategory("temp_files", "System & User Temporary Files", "Windows and application temporary cache in %TEMP% and Windows\\Temp", "📁", "#60CDFF");
-            AddCategory("browser_cache", "Web Browser Caches", "Chrome, Edge, Brave, Firefox, and Opera internet cache and shader data", "🌐", "#60CDFF");
-            AddCategory("win_update", "Windows Update Download Cache", "Leftover update packages in SoftwareDistribution\\Download", "🔄", "#60CDFF");
-            AddCategory("crash_dumps", "Error Reports & Crash Dumps", "Windows Error Reporting (WER) and memory dump logs", "⚠️", "#FCE100");
-            AddCategory("empty_folders", "Empty Temporary Directories", "Abandoned 0-byte directories created by uninstalled applications", "📂", "#8A8A8A");
+            // The category list comes from the shared taxonomy (targets.json)
+            // so the native and web editions always offer the same targets.
+            foreach (CleanupGroup group in LoadTaxonomy()) {
+                foreach (CleanupTarget target in group.Targets) {
+                    AddCategory(target.Id, target.Name, target.Desc, IconForGroup(group.Icon), IconColorForGroup(group.Id));
+                }
+            }
+        }
 
-            AddCategory("vscode_cache", "VS Code Caches & Crash Dumps", "Visual Studio Code installer packages and crash logs", "💻", "#60CDFF");
-            AddCategory("dev_cache", "npm & pip Package Caches", "Node.js and Python package manager cache folders", "📦", "#60CDFF");
-            AddCategory("discord_cache", "Discord Client Cache", "Discord media, audio, and GPU shader caches", "💬", "#60CDFF");
-            AddCategory("capcut_old", "Outdated CapCut App Versions", "Older builds leftover in AppData\\Local\\CapCut\\Apps", "🎬", "#60CDFF");
-            AddCategory("nvidia_artifacts", "NVIDIA Driver Update Packages", "Downloaded GPU driver installers in NVIDIA App UpdateFramework", "🎮", "#6CCB5F");
+        // Each taxonomy group gets a distinct accent colour so the list is
+        // readable at a glance.
+        static string IconColorForGroup(string groupId) {
+            switch (groupId) {
+                case "system": return "#60CDFF";
+                case "graphics": return "#6CCB5F";
+                case "browsers": return "#C084FC";
+                case "apps": return "#FCE100";
+                case "dev": return "#FF99A4";
+                case "media": return "#FDBA74";
+                default: return "#60CDFF";
+            }
+        }
+
+        static string IconForGroup(string icon) {
+            return string.IsNullOrEmpty(icon) ? "🧹" : icon;
         }
 
         static void AddCategory(string id, string name, string desc, string icon, string iconBgHex) {

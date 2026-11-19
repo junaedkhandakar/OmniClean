@@ -1,6 +1,9 @@
 # scan.ps1 - Produces a single JSON document describing disk usage,
 # cleanable categories and basic system telemetry for the web UI.
 # This script must ONLY write JSON to stdout (no logs, no stray output).
+#
+# The category list comes from targets.json (shared with the native
+# edition) and is measured through the resolvers in targets.ps1.
 
 param(
     # Optional drive letter (C:, D:, ...) the scan should report on.
@@ -8,6 +11,10 @@ param(
 )
 
 $ErrorActionPreference = "SilentlyContinue"
+# The category names and icons are non-ASCII. Without this the console
+# codepage mangles them on the way to stdout and the JSON the server parses
+# would be corrupt.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 . (Join-Path $PSScriptRoot 'targets.ps1')
 
 $activeDrive = Set-OmniCleanActiveDrive $Drive
@@ -22,15 +29,36 @@ if ($disk -and $disk.Size -gt 0) {
     $pctFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1)
 }
 
-# --- Category sizes (shared definitions in targets.ps1) ---
+# --- Category sizes, grouped for the UI ---
 $categoryList = @()
-foreach ($t in (Get-OmniCleanTargets)) {
-    $categoryList += [PSCustomObject]@{
-        id      = $t.id
-        name    = $t.name
-        sizeMB  = Get-OmniCleanTargetSizeMB $t
-        desc    = $t.desc
-        paths   = @(Get-OmniCleanTargetPaths $t)
+$groupList = @()
+foreach ($group in (Get-OmniCleanTaxonomy).groups) {
+    $groupTargets = @()
+    foreach ($t in $group.targets) {
+        $sizeMB = Get-OmniCleanTargetSizeMB $t
+        $paths = @(Get-OmniCleanTargetPaths $t)
+        $groupTargets += [PSCustomObject]@{
+            id      = $t.id
+            name    = $t.name
+            desc    = $t.desc
+            kind    = $t.kind
+            sizeMB  = $sizeMB
+            paths   = $paths
+            detected = ($paths.Count -gt 0)
+        }
+    }
+    $groupList += [PSCustomObject]@{
+        id      = $group.id
+        name    = $group.name
+        targets = $groupTargets
+    }
+}
+
+# Flat list for convenience (the UI groups them, but other consumers
+# may just want the list).
+foreach ($g in $groupList) {
+    foreach ($t in $g.targets) {
+        $categoryList += $t
     }
 }
 
@@ -47,6 +75,9 @@ $ramGB = if ($ramObj -and $ramObj.TotalPhysicalMemory) {
 } else { 0 }
 $gpuObj = Get-CimInstance Win32_VideoController | Select-Object -First 1
 $gpu = if ($gpuObj -and $gpuObj.Name) { $gpuObj.Name.Trim() } else { '' }
+$gpuList = @(Get-CimInstance Win32_VideoController |
+    ForEach-Object { if ($_.Name) { $_.Name.Trim() } } |
+    Where-Object { $_ } | Select-Object -Unique)
 $arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
 $uptimeHours = [math]::Round(((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours, 1)
 
@@ -79,6 +110,7 @@ if ($drives.Count -eq 0) {
         percentFree = $pctFree
     }
     categories = $categoryList
+    groups    = $groupList
     drives = $drives
     scheduledTask = [PSCustomObject]@{
         enabled = $hasTask
@@ -88,8 +120,9 @@ if ($drives.Count -eq 0) {
         cpu     = $cpu
         ramGB   = $ramGB
         gpu     = $gpu
+        gpus    = $gpuList
         arch    = $arch
         uptimeHours = $uptimeHours
     }
     isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-} | ConvertTo-Json -Depth 5
+} | ConvertTo-Json -Depth 6

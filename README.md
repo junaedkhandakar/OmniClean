@@ -1,6 +1,6 @@
 # OmniClean
 
-Version: 1.1.0
+Version: 1.2.0
 Universal Windows Storage Optimizer and Performance Utility.
 
 OmniClean is a native, lightweight Windows desktop application engineered to inspect system drives, reclaim disk space from redundant caches, discover large or duplicate files, trim idle memory working sets, and optimize overall system responsiveness. It ships as a single standalone executable with zero external runtime dependencies (native edition), plus an optional local web edition.
@@ -30,50 +30,57 @@ The capabilities matrix below describes the native edition in full; the web edit
 2. **Multi-Target Cache and Garbage Purging**
    - **Windows Recycle Bin**: Cleans all user recycle bins via native Win32 `SHEmptyRecycleBin` APIs without confirmation prompts or sound disruptions.
    - **User & System Temp**: Clears temporary directories (`%TEMP%` and `C:\Windows\Temp`).
-   - **Universal Browser Cache**: Purges temporary disk cache, GPU shader caches, and code caches across Google Chrome, Microsoft Edge, Brave Browser, Mozilla Firefox, and Opera.
+   - **Universal Browser Cache**: Purges temporary disk cache, GPU shader caches, and code caches across Google Chrome, Microsoft Edge, Brave Browser, Mozilla Firefox, Opera, Vivaldi, Arc, CentBrowser, Chromium, Coc Coc and Yandex - every profile of every installed browser, not just the default one.
    - **Windows Update Downloads**: Removes stale download payloads in `C:\Windows\SoftwareDistribution\Download` after updates are applied.
    - **Crash Dumps and WER**: Clears user crash dump repositories (`%LOCALAPPDATA%\CrashDumps`) and Windows Error Reporting queue and archive directories.
-   - **NVIDIA GPU Update Staging**: Removes leftover driver installer archives in `ProgramData\NVIDIA Corporation\NVIDIA app\UpdateFramework\ota-artifacts`.
+   - **Vendor-Agnostic Graphics Cache**: Clears DirectX, D3D bytecode, Vulkan, OpenGL and Mesa shader caches for **NVIDIA, AMD and Intel** alike, plus Steam shader pre-caches and WineD3D software-rasterizer caches. Vendor driver download archives are cleared for each vendor separately.
    - **CapCut Version Management**: Scans video editing installation folders and prunes obsolete version builds while safeguarding the active build.
    - **VS Code Development Caches**: Purges cached extension `.vsix` installers, Crashpad reports, and editor cached data.
-   - **Developer Package Caches**: Clears `npm-cache` and `pip cache` directories to reclaim disk space from accumulated node and python packages.
+   - **Developer Package Caches**: Clears `npm`, `pip`, `yarn`, `nuget`, `cargo`, `gradle` and `go` module caches to reclaim disk space from accumulated packages.
    - **Discord Media & Shader Caches**: Clears discord cache folders without resetting account sessions.
+   - **41 cleanup targets in 6 groups**, all driven by one shared taxonomy file (`targets.json`) - see *Shared Cleanup Taxonomy* below.
 
-3. **Dry Run Simulation Mode**
+3. **Deep Storage Analysis**
+   - Walks an entire volume - not just the user profile - to find the files actually eating the disk.
+   - Reparse points (junctions and symlinks) are skipped, so a link pointing back up the tree can never turn the walk into an infinite loop.
+   - Reports the largest individual files, the folders that hold them, and a breakdown by file type.
+   - Available in the web edition as *Deep Scan* and in the native edition as *Scan for Large Files* (cancellable at any time).
+
+4. **Dry Run Simulation Mode**
    - Provides a non-destructive simulation toggle (`Dry Run (Simulation Only)`).
    - Allows users to preview potential disk space reclamation and inspect affected directory paths without deleting a single file.
 
-4. **Working Set Memory Optimization**
+5. **Working Set Memory Optimization**
    - Flushes idle memory pages across active processes via the Windows PSAPI `EmptyWorkingSet` subsystem.
    - Reclaims physical RAM without terminating or restarting background applications.
    - Features real-time RAM load percentage and capacity tracking.
 
-5. **Large File Discovery and Size Filters**
+6. **Large File Discovery and Size Filters**
    - Scans user directories recursively to locate hidden files exceeding 100 MB.
    - Features 1-click filter pills: All (>100 MB), Media/Archives (>500 MB), and Huge (>1 GB).
    - Displays file extension badges, file names, file paths, size badges, and provides instant buttons to reveal files in Windows Explorer or safely delete them.
 
-6. **Cryptographic Duplicate File Finder and 1-Click Clean**
+7. **Cryptographic Duplicate File Finder and 1-Click Clean**
    - Employs a fast two-phase duplicate discovery algorithm:
      - Phase 1: Groups candidates by exact file byte size.
      - Phase 2: Computes full-file SHA-256 cryptographic hashes (streamed over the entire file) for size-matched files to ensure 100% byte-level certainty before identifying duplicates.
    - Distinguishes original files with green protected badges and redundant copies with copy badges.
    - Features a 1-click `Delete All Duplicate Copies` action that safely eliminates all duplicate files while keeping 100% of original files intact.
 
-7. **Windows Startup Application Manager**
+8. **Windows Startup Application Manager**
    - Reads configured auto-launch applications from the Windows Registry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`).
    - Interactive toggle switches: Click to toggle between ACTIVE (emerald badge) and DISABLED (slate badge) states to accelerate PC boot times.
    - Disabling an entry parks it under `HKCU\Software\OmniClean\DisabledStartup` instead of deleting it, so it can be restored at any time. Machine-wide (HKLM) entries report clearly when Administrator rights are required.
 
-8. **Silent Background Automation**
+9. **Silent Background Automation**
    - Supports seamless integration with Windows Task Scheduler via native command line execution.
    - Schedules weekly maintenance runs executing `OmniClean.exe --silent-clean` in headless mode.
 
-9. **Diagnostic Activity Logging and Export**
+10. **Diagnostic Activity Logging and Export**
    - Displays real-time operation timestamps and progress details in a built-in terminal console.
    - Provides `Clear` and `Export Log` actions to save cleanup histories and scan reports as standard text files.
 
-10. **Hardware and System Telemetry HUD**
+11. **Hardware and System Telemetry HUD**
     - Identifies processor architecture, core counts, CPU model, total physical RAM, and live system uptime without requiring external diagnostic tools.
 
 11. **Safety, Auditability, and Control (v1.0.4)**
@@ -117,10 +124,11 @@ OmniClean is intentionally engineered with strict safety constraints to prevent 
 
 - **Language**: C# 5 / .NET Framework 4.5+ (Natively pre-installed on Windows 10, Windows 11, and Windows Server).
 - **GUI Engine**: Windows Presentation Foundation (WPF) with dark theme and hardware acceleration (native DWM rounded corners and drop shadow on Windows 11).
-- **Source Layout**: Three partial-class files - `OmniClean.cs` (window, embedded XAML UI, and wiring), `OmniClean.Engine.cs` (cleanup pipeline and deletion audit trail), `OmniClean.Analysis.cs` (large files, duplicates, startup optimizer).
+- **Source Layout**: Five partial-class files - `OmniClean.cs` (window, embedded XAML UI, and wiring), `OmniClean.Engine.cs` (cleanup pipeline and deletion audit trail), `OmniClean.Analysis.cs` (large files, duplicates, startup optimizer), `OmniClean.Taxonomy.cs` (taxonomy loader and a dependency-free JSON reader), `OmniClean.Resolvers.cs` (path resolution per target kind).
+- **Shared Cleanup Taxonomy**: `targets.json` defines every cleanup target in 6 groups. The web engine reads it through `targets.ps1`, the native engine embeds it as a manifest resource, and `lib/taxonomy.js` reads it for the API allowlist. A category therefore cannot exist on one side only, and adding a new target needs no code change in either engine.
 - **Navigation Layout**: Left Sidebar navigation with active indicator bars and dedicated workspace canvas.
 - **Interactive Feedback**: Dynamic card hover effects with illumination highlights.
-- **Binary Footprint**: ~186 KB standalone executable with embedded application icon, DPI-aware manifest (Per-Monitor V2), and version metadata.
+- **Binary Footprint**: ~234 KB standalone executable with embedded application icon, DPI-aware manifest (Per-Monitor V2), version metadata, and the shared cleanup taxonomy.
 - **External Dependencies**: Zero for the native executable. No NuGet dependencies, no Python runtime, and no Node.js runtime are required to build or run `OmniClean.exe` (Node.js is only needed for the optional Web Edition).
 - **Build System**: Compiles using the native Microsoft Visual C# compiler (`csc.exe`).
 
@@ -153,6 +161,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 | `OmniClean.exe` | Launches the interactive graphical user interface. |
 | `OmniClean.exe --silent-clean` | Executes a headless, background cleanup of temporary caches without opening the GUI window. |
 | `OmniClean.exe --validate-xaml` | Parses the embedded UI markup and exits with code 0 (valid) or 1 (invalid); used by CI to catch UI regressions. |
+| `OmniClean.exe --validate-taxonomy` | Loads the embedded `targets.json` cleanup taxonomy and exits with code 0 (valid) or 1 (invalid); used by CI so a broken taxonomy can never ship. |
 
 ---
 
@@ -195,6 +204,8 @@ The engine logs to `server.log` next to `Launch.bat`.
 | `/api/status` | `GET` | Disk usage, category sizes, scheduler state, system info (cached ~20 s). |
 | `/api/clean` | `POST` | Body `{"categories": ["recycle_bin", ...], "dryRun": true, "drive": "C:"}` - runs `cleaner.ps1` and returns its log lines plus refreshed disk stats. **`dryRun` defaults to `true`**, so a cleanup never deletes unless the caller explicitly passes `"dryRun": false`. |
 | `/api/schedule` | `POST` | Body `{"enable": true}` or `{"enable": false}` - creates/removes a weekly Task Scheduler job (`StorageOptimizerAutoClean`, Sundays 12:00). |
+| `/api/taxonomy` | `GET` | The grouped cleanup catalogue (6 groups, 41 targets) as declared in `targets.json`. |
+| `/api/largefiles` | `GET` | Deep scan of a volume. Query `?drive=C:&minSizeMB=100&top=200` - returns the largest files, the folders holding them and a breakdown by file type. |
 
 `/api/status` also accepts `?drive=C:` to report on a specific volume, and
 returns the list of local fixed drives for the drive picker.
@@ -210,6 +221,8 @@ returns the list of local fixed drives for the drive picker.
 - Request bodies are capped at 8 KB and category ids must match `^[a-z][a-z0-9_]*$`.
 - Static responses carry a strict Content-Security-Policy, `X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
 - Only cache folders are ever touched - browser profiles, cookies, bookmarks and saved passwords are never read or deleted.
+- A protected-path guard exists in **both** engines: `WinSxS`, `Installer`, `servicing`, `DriverStore`, `System32\config`, `Package Cache`, `Docker\wsl` and `Program Files` can never be emptied, even if a taxonomy entry points at them. A test asserts no taxonomy entry targets one of those locations.
+- The deep scan is read-only - it reports what it finds and never deletes anything.
 
 ### Testing
 

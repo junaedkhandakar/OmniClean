@@ -38,6 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnClearConsole = document.getElementById('btn-clear-console');
     const toast = document.getElementById('toast');
 
+    const btnScanLarge = document.getElementById('btn-scan-large');
+    const largeMinSize = document.getElementById('large-min-size');
+    const largeStatus = document.getElementById('large-status');
+    const largeResults = document.getElementById('large-results');
+    const largeTypes = document.getElementById('large-types');
+    const largeFiles = document.getElementById('large-files');
+
     const confirmOverlay = document.getElementById('confirm-overlay');
     const confirmBody = document.getElementById('confirm-body');
     const confirmList = document.getElementById('confirm-list');
@@ -52,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const DRY_RUN_THRESHOLD_MB = 0.5;
 
     let currentCategories = [];
+    let currentGroups = [];
     let selectedCategoryIds = new Set();
     let cleanInFlight = false;
     let toastTimer = null;
@@ -177,7 +185,9 @@ document.addEventListener('DOMContentLoaded', () => {
         item.setAttribute('aria-checked', String(isSelected));
 
         const hasSize = cat.sizeMB > 0.1;
-        const badgeClass = hasSize ? 'has-data' : 'clean';
+        // A target that was not detected on this machine is shown dimmed so
+        // the user can tell "nothing to clean" from "not applicable here".
+        const badgeClass = !cat.detected ? 'absent' : (hasSize ? 'has-data' : 'clean');
 
         const left = document.createElement('div');
         left.className = 'item-left';
@@ -202,17 +212,20 @@ document.addEventListener('DOMContentLoaded', () => {
         right.className = 'item-right';
         const badge = document.createElement('span');
         badge.className = `size-badge ${badgeClass}`;
-        badge.textContent = hasSize ? formatSize(cat.sizeMB) : 'Clean';
+        badge.textContent = !cat.detected ? 'N/A' : (hasSize ? formatSize(cat.sizeMB) : 'Clean');
         right.appendChild(badge);
 
         item.append(left, right);
         return item;
     }
 
+    // Renders the categories grouped by taxonomy group, so the list reads
+    // as "System / Graphics / Browsers / Apps / Dev" instead of one flat
+    // wall of entries.
     function renderCategories() {
         categoryList.innerHTML = '';
 
-        if (!currentCategories || currentCategories.length === 0) {
+        if (currentCategories.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'loading-state';
             empty.textContent = 'No categories detected.';
@@ -221,10 +234,37 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const fragment = document.createDocumentFragment();
-        currentCategories.forEach((cat) => fragment.appendChild(buildCategoryItem(cat)));
-        categoryList.appendChild(fragment);
+        const groups = currentGroups.length > 0
+            ? currentGroups
+            : [{ id: 'all', name: 'All targets', icon: '🧹', targets: currentCategories }];
 
+        const fragment = document.createDocumentFragment();
+        groups.forEach((group) => {
+            const targets = group.targets || [];
+            if (targets.length === 0) return;
+
+            const header = document.createElement('div');
+            header.className = 'category-group-header';
+
+            const icon = document.createElement('span');
+            icon.className = 'group-icon';
+            icon.textContent = group.icon || '🧹';
+
+            const name = document.createElement('span');
+            name.className = 'group-name';
+            name.textContent = group.name;
+
+            const count = document.createElement('span');
+            count.className = 'group-count';
+            count.textContent = `${targets.length}`;
+
+            header.append(icon, name, count);
+            fragment.appendChild(header);
+
+            targets.forEach((cat) => fragment.appendChild(buildCategoryItem(cat)));
+        });
+
+        categoryList.appendChild(fragment);
         updateSelectedSummary();
     }
 
@@ -285,7 +325,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnSelectAll.addEventListener('click', () => {
-        selectedCategoryIds = new Set(currentCategories.map((c) => c.id));
+        selectedCategoryIds = new Set(
+            currentCategories.filter((c) => c.detected).map((c) => c.id)
+        );
         renderCategories();
     });
 
@@ -307,6 +349,120 @@ document.addEventListener('DOMContentLoaded', () => {
     btnClearConsole.addEventListener('click', () => {
         consoleOutput.innerHTML = '';
         addLog('[Log cleared]', 'system');
+    });
+
+    // ---- deep storage analysis -------------------------------------------
+
+    function renderLargeResults(data) {
+        largeTypes.innerHTML = '';
+        largeFiles.innerHTML = '';
+
+        const types = Array.isArray(data.types) ? data.types : [];
+        if (types.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-hint';
+            empty.textContent = 'No files above the selected size were found.';
+            largeTypes.appendChild(empty);
+        } else {
+            const max = types[0].sizeMB || 1;
+            types.forEach((t) => {
+                const row = document.createElement('div');
+                row.className = 'type-row';
+
+                const label = document.createElement('span');
+                label.className = 'type-label';
+                label.textContent = t.ext;
+
+                const bar = document.createElement('span');
+                bar.className = 'type-bar';
+                const fill = document.createElement('span');
+                fill.className = 'type-bar-fill';
+                fill.style.width = `${Math.max(3, Math.round((t.sizeMB / max) * 100))}%`;
+                bar.appendChild(fill);
+
+                const size = document.createElement('span');
+                size.className = 'type-size';
+                size.textContent = formatSize(t.sizeMB);
+
+                row.append(label, bar, size);
+                largeTypes.appendChild(row);
+            });
+        }
+
+        const files = Array.isArray(data.files) ? data.files : [];
+        if (files.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-hint';
+            empty.textContent = 'No large files found.';
+            largeFiles.appendChild(empty);
+        } else {
+            files.slice(0, 60).forEach((f) => {
+                const row = document.createElement('div');
+                row.className = 'large-file-row';
+                row.title = f.path;
+
+                const name = document.createElement('span');
+                name.className = 'large-file-name';
+                name.textContent = f.name;
+
+                const path = document.createElement('span');
+                path.className = 'large-file-path';
+                path.textContent = f.path;
+
+                const size = document.createElement('span');
+                size.className = 'large-file-size';
+                size.textContent = formatSize(f.sizeMB);
+
+                row.append(name, path, size);
+                largeFiles.appendChild(row);
+            });
+        }
+
+        largeResults.hidden = false;
+    }
+
+    btnScanLarge.addEventListener('click', async () => {
+        const minSize = Number(largeMinSize.value) || 100;
+        btnScanLarge.disabled = true;
+        largeResults.hidden = true;
+        largeStatus.textContent = `Deep-scanning ${driveSelect.value || 'C:'} for files above ${minSize} MB. This walks the whole volume and can take a few minutes...`;
+        largeStatus.className = 'analysis-status running';
+        addLog(`[Deep Scan] Walking ${driveSelect.value || 'C:'} for files >= ${minSize} MB...`, 'system');
+        setStatusDot('busy');
+
+        try {
+            const drive = encodeURIComponent(driveSelect.value || 'C:');
+            const { ok, status, data } = await fetchJSON(
+                `/api/largefiles?drive=${drive}&minSizeMB=${minSize}&top=200`,
+                {},
+                30 * 60 * 1000
+            );
+
+            if (!ok) {
+                largeStatus.textContent = `Scan failed (${status}): ${data.error || 'unknown error'}`;
+                largeStatus.className = 'analysis-status error';
+                addLog(`[Deep Scan] Failed: ${data.error || status}`, 'error');
+                showToast('Deep scan failed.', 'error');
+                return;
+            }
+
+            const found = (data.files || []).length;
+            const totalMB = (data.types || []).reduce((sum, t) => sum + (t.sizeMB || 0), 0);
+            largeStatus.textContent = `Scanned ${Number(data.scannedFiles).toLocaleString()} files in ${Number(data.scannedDirs).toLocaleString()} folders. Found ${data.totalFound} files above ${minSize} MB (${formatSize(totalMB)} across all types).`;
+            largeStatus.className = 'analysis-status done';
+
+            renderLargeResults(data);
+            addLog(`[Deep Scan] Complete: ${found} large files listed.`, 'success');
+        } catch (err) {
+            const reason = err.name === 'AbortError' ? 'timed out' : err.message;
+            largeStatus.textContent = `Scan failed: ${reason}`;
+            largeStatus.className = 'analysis-status error';
+            addLog(`[Deep Scan] Failed: ${reason}`, 'error');
+            showToast('Deep scan failed.', 'error');
+        } finally {
+            btnScanLarge.disabled = false;
+            setStatusDot('');
+        }
     });
 
     // ---- confirmation dialog ----
@@ -375,10 +531,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.categories) {
                 currentCategories = data.categories;
+                currentGroups = Array.isArray(data.groups) ? data.groups : [];
                 // Keep the user's manual selection across rescans: only add
                 // newly detected junk, never drop what the user picked.
                 const detected = currentCategories
-                    .filter((c) => c.sizeMB > DRY_RUN_THRESHOLD_MB)
+                    .filter((c) => c.detected && c.sizeMB > DRY_RUN_THRESHOLD_MB)
                     .map((c) => c.id);
                 detected.forEach((id) => selectedCategoryIds.add(id));
                 renderCategories();

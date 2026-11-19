@@ -18,3 +18,9 @@ Desktop.ini
 # Node.js (web edition)
 node_modules/
 server.log
+
+# Local scratch & tool output
+.scratch/
+largefiles-out.txt
+scan-out.json
+taxonomy-validation.log

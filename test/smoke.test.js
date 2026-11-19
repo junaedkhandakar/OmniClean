@@ -79,18 +79,24 @@ function runPowerShell(scriptPath, args = [], timeoutMs = 180000) {
     });
 }
 
-// Category ids declared in targets.ps1 (PowerShell side of the allowlist).
-function targetIdsFromPs1() {
-    const src = fs.readFileSync(path.join(ROOT, 'targets.ps1'), 'utf8');
-    return [...src.matchAll(/^\s*id\s*=\s*'([a-z0-9_]+)'/gm)].map((m) => m[1]);
+// The cleanup taxonomy (targets.json) is the single source of truth for
+// both editions. These helpers read it directly.
+function taxonomy() {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, 'targets.json'), 'utf8'));
 }
 
-// Category ids declared in server.js (JavaScript side of the allowlist).
-function allowlistFromServerJs() {
-    const src = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-    const block = src.match(/CATEGORIES = Object\.freeze\(\[([^\]]*)\]/);
-    assert.ok(block, 'server.js must declare CATEGORIES = Object.freeze([...])');
-    return [...block[1].matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
+function taxonomyTargetIds() {
+    const ids = [];
+    for (const group of taxonomy().groups) {
+        for (const target of group.targets) ids.push(target.id);
+    }
+    return ids;
+}
+
+// Category ids the server derives from the taxonomy.
+function allowlistFromServer() {
+    const { categoryIds } = require('../lib/taxonomy');
+    return categoryIds();
 }
 
 // ---- server lifecycle ----------------------------------------------------
@@ -256,7 +262,30 @@ test('GET /api/status returns the documented schema', { skip: !isWin }, async ()
         assert.equal(typeof c.desc, 'string');
         assert.ok(Number.isFinite(c.sizeMB), `category ${c.id} sizeMB must be a number`);
         assert.ok(Array.isArray(c.paths), `category ${c.id} paths must be an array`);
+        assert.equal(typeof c.detected, 'boolean', `category ${c.id} needs a detected flag`);
     }
+
+    // The groups mirror the taxonomy and cover every category exactly once.
+    assert.ok(Array.isArray(data.groups) && data.groups.length > 0, 'the UI needs grouped categories');
+    const groupedIds = [];
+    for (const g of data.groups) {
+        assert.ok(g.id && g.name, 'each group needs an id and a name');
+        assert.ok(Array.isArray(g.targets));
+        groupedIds.push(...g.targets.map((t) => t.id));
+    }
+    assert.deepEqual(
+        groupedIds.slice().sort(),
+        data.categories.map((c) => c.id).sort(),
+        'the grouped list must cover every category exactly once'
+    );
+
+    // Every category id in the taxonomy must be present.
+    const expectedIds = taxonomyTargetIds().slice().sort();
+    assert.deepEqual(
+        data.categories.map((c) => c.id).sort(),
+        expectedIds,
+        'every taxonomy target must be reported by the scan'
+    );
 
     assert.equal(typeof data.scheduledTask.enabled, 'boolean');
     assert.ok(data.system && typeof data.system.cpu === 'string');
@@ -288,11 +317,160 @@ test('GET /api/status returns the documented schema', { skip: !isWin }, async ()
     );
 });
 
-test('server.js and targets.ps1 declare the same category ids', () => {
-    const fromPs = targetIdsFromPs1().sort();
-    const fromJs = allowlistFromServerJs().sort();
-    assert.deepEqual(fromJs, fromPs, 'CATEGORIES allowlist must match targets.ps1');
-    assert.ok(fromPs.length >= 7, 'expected the full category list');
+test('server.js and targets.json declare the same category ids', () => {
+    const fromTaxonomy = taxonomyTargetIds().sort();
+    const fromServer = allowlistFromServer().sort();
+    assert.deepEqual(fromServer, fromTaxonomy, 'the server allowlist must match targets.json');
+    assert.ok(fromTaxonomy.length >= 20, 'expected a substantial category list');
+});
+
+test('the taxonomy covers graphics caches for every major GPU vendor', () => {
+    const ids = taxonomyTargetIds();
+    // The point of the taxonomy is that graphics cleanup is not NVIDIA-only.
+    for (const required of [
+        'gpu_shader_cache',
+        'nvidia_artifacts',
+        'amd_artifacts',
+        'intel_artifacts',
+        'directx_cache',
+        'vulkan_cache'
+    ]) {
+        assert.ok(ids.includes(required), `targets.json must define "${required}"`);
+    }
+});
+
+test('the taxonomy covers several browser families and app families', () => {
+    const ids = taxonomyTargetIds();
+    for (const required of [
+        'browser_cache',
+        'browser_service_worker',
+        'discord_cache',
+        'teams_cache',
+        'app_shelf_cache',
+        'game_shader_cache',
+        'dev_cache',
+        'vscode_cache'
+    ]) {
+        assert.ok(ids.includes(required), `targets.json must define "${required}"`);
+    }
+});
+
+test('the taxonomy never points at a protected system location', () => {
+    const forbidden = [
+        'WinSxS',
+        'Installer\\$PatchCache$',
+        'System32\\DriverStore',
+        'Docker\\wsl',
+        'Package Cache'
+    ];
+    for (const group of taxonomy().groups) {
+        for (const target of group.targets) {
+            for (const p of target.paths || []) {
+                for (const bad of forbidden) {
+                    assert.ok(
+                        !p.toLowerCase().includes(bad.toLowerCase()),
+                        `"${target.id}" points at a protected location: ${p}`
+                    );
+                }
+            }
+        }
+    }
+});
+
+test('every taxonomy target has an id, name, description and kind', () => {
+    const kinds = new Set(['paths', 'recycle', 'browser_cache', 'gpu_cache', 'capcut_old', 'empty_dirs']);
+    const seen = new Set();
+    for (const group of taxonomy().groups) {
+        for (const target of group.targets) {
+            assert.match(target.id, /^[a-z][a-z0-9_]*$/, `bad id: ${target.id}`);
+            assert.ok(target.name && target.name.length > 2, `${target.id} needs a name`);
+            assert.ok(target.desc && target.desc.length > 5, `${target.id} needs a description`);
+            assert.ok(kinds.has(target.kind), `${target.id} has an unknown kind: ${target.kind}`);
+            assert.ok(!seen.has(target.id), `duplicate target id: ${target.id}`);
+            seen.add(target.id);
+        }
+    }
+});
+
+// ---- taxonomy endpoint ----------------------------------------------------
+
+test('GET /api/taxonomy returns the grouped catalogue', async () => {
+    const res = await rawRequest({ path: '/api/taxonomy' });
+    assert.equal(res.status, 200);
+
+    const data = JSON.parse(res.body);
+    assert.ok(Array.isArray(data.groups) && data.groups.length > 0);
+    for (const group of data.groups) {
+        assert.equal(typeof group.id, 'string');
+        assert.equal(typeof group.name, 'string');
+        assert.ok(Array.isArray(group.targets) && group.targets.length > 0);
+        for (const target of group.targets) {
+            assert.match(target.id, /^[a-z][a-z0-9_]*$/);
+            assert.ok(typeof target.kind === 'string' && target.kind.length > 0);
+        }
+    }
+});
+
+// ---- large file scan ------------------------------------------------------
+
+test('/api/largefiles rejects an invalid drive', async () => {
+    const res = await rawRequest({ path: '/api/largefiles?drive=..%5Cwindows' });
+    assert.equal(res.status, 400);
+});
+
+test('/api/largefiles rejects an out-of-range size filter', async () => {
+    for (const value of ['0', '-5', '999999']) {
+        const res = await rawRequest({ path: `/api/largefiles?minSizeMB=${value}` });
+        assert.equal(res.status, 400, `minSizeMB=${value} must be rejected`);
+    }
+});
+
+test('largefiles.ps1 emits a parseable report', { skip: !isWin }, async () => {
+    // A very high threshold keeps the test quick while still proving the
+    // deep walker works end to end. The walk itself is what costs time, so
+    // the timeout has to be generous.
+    const script = path.join(ROOT, 'largefiles.ps1');
+    const res = await runPowerShell(script, ['-Drive', 'C:', '-MinSizeMB', '102400', '-Top', '5'], 900000);
+
+    assert.equal(res.code, 0, `largefiles.ps1 should exit 0. Output:\n${res.stderr}`);
+    const data = JSON.parse(res.stdout);
+    assert.equal(data.drive, 'C:');
+    assert.ok(Number.isFinite(data.scannedFiles), 'scannedFiles must be a number');
+    assert.ok(Number.isFinite(data.scannedDirs), 'scannedDirs must be a number');
+    assert.ok(Array.isArray(data.files));
+    assert.ok(Array.isArray(data.folders));
+    assert.ok(Array.isArray(data.types));
+
+    // Everything reported must be at or above the requested threshold.
+    for (const file of data.files) {
+        assert.ok(
+            file.sizeMB >= 102400,
+            `file ${file.path} (${file.sizeMB} MB) is below the 102400 MB threshold`
+        );
+    }
+
+    // The results must be sorted largest first.
+    for (let i = 1; i < data.files.length; i++) {
+        assert.ok(
+            data.files[i - 1].bytes >= data.files[i].bytes,
+            'files must be sorted by size descending'
+        );
+    }
+});
+
+test('the native build embeds the shared taxonomy', { skip: !isWin }, async () => {
+    const exe = path.join(ROOT, 'OmniClean.exe');
+    if (!fs.existsSync(exe)) {
+        // The CI workflow builds it before this test runs; locally it may be
+        // missing, which is not a failure of the taxonomy itself.
+        return;
+    }
+    const res = await new Promise((resolve) => {
+        execFile(exe, ['--validate-taxonomy'], { timeout: 60000, windowsHide: true }, (err, stdout) => {
+            resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: stdout || '' });
+        });
+    });
+    assert.equal(res.code, 0, 'the executable must be able to read its embedded taxonomy');
 });
 
 // ---- release version parity ----------------------------------------------

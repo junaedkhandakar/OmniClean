@@ -15,3 +15,6 @@
 OmniClean.cs
 OmniClean.Engine.cs
 OmniClean.Analysis.cs
+OmniClean.Taxonomy.cs
+OmniClean.Resolvers.cs
+/resource:targets.json,OmniClean.targets.json
