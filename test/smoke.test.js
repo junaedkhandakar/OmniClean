@@ -349,7 +349,7 @@ test('the taxonomy covers several browser families and app families', () => {
         'app_shelf_cache',
         'game_shader_cache',
         'dev_cache',
-        'vscode_cache'
+        'editor_caches'
     ]) {
         assert.ok(ids.includes(required), `targets.json must define "${required}"`);
     }
@@ -378,7 +378,7 @@ test('the taxonomy never points at a protected system location', () => {
 });
 
 test('every taxonomy target has an id, name, description and kind', () => {
-    const kinds = new Set(['paths', 'recycle', 'browser_cache', 'gpu_cache', 'capcut_old', 'empty_dirs']);
+    const kinds = new Set(['paths', 'recycle', 'browser_cache', 'gpu_cache', 'capcut_old', 'empty_dirs', 'glob', 'old_app_versions', 'editor_cache']);
     const seen = new Set();
     for (const group of taxonomy().groups) {
         for (const target of group.targets) {
@@ -430,7 +430,9 @@ test('largefiles.ps1 emits a parseable report', { skip: !isWin }, async () => {
     // deep walker works end to end. The walk itself is what costs time, so
     // the timeout has to be generous.
     const script = path.join(ROOT, 'largefiles.ps1');
-    const res = await runPowerShell(script, ['-Drive', 'C:', '-MinSizeMB', '102400', '-Top', '5'], 900000);
+    // MaxDirs bounds the walk so the suite stays fast on machines with
+    // millions of files; the report contract is what this test proves.
+    const res = await runPowerShell(script, ['-Drive', 'C:', '-MinSizeMB', '102400', '-Top', '5', '-MaxDirs', '20000'], 300000);
 
     assert.equal(res.code, 0, `largefiles.ps1 should exit 0. Output:\n${res.stderr}`);
     const data = JSON.parse(res.stdout);

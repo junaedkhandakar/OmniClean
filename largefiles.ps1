@@ -11,6 +11,9 @@ param(
     [string]$Drive = 'C:',
     [int]$MinSizeMB = 100,
     [int]$Top = 200,
+    # Safety valve: stop after this many directories (0 = walk everything).
+    # Tests use it to keep a full-volume walk from dominating the suite.
+    [int]$MaxDirs = 0,
     # Skip these system folders - they are huge but not user data and
     # deleting anything in them breaks Windows.
     [switch]$IncludeSystem
@@ -51,6 +54,7 @@ $scannedDirs = 0
 $skipped = 0
 
 while ($stack.Count -gt 0) {
+    if ($MaxDirs -gt 0 -and $scannedDirs -ge $MaxDirs) { break }
     $current = $stack.Pop()
     $scannedDirs++
 
